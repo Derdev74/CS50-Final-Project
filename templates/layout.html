@@ -3,29 +3,222 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}FinTrack{% endblock %}</title>
-    <!-- Bootstrap CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <!-- Custom CSS -->
+    <meta name="description" content="{% block meta_description %}FinTrack - Personal Finance Manager{% endblock %}">
+    <meta name="author" content="Derdev74">
+    
+    <!-- Security Headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    
+    <!-- CSRF Token for forms -->
+    {% if csrf_token %}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    {% endif %}
+    
+    <title>{% block title %}FinTrack - Personal Finance Manager{% endblock %}</title>
+    
+    <!-- Your Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    {% block head %}{% endblock %}
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    {% block extra_css %}{% endblock %}
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg mb-4" style="background-color: var(--bg-primary); border-bottom: 1px solid var(--border-color);">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/" style="color: var(--primary-color);">FinTrack</a>
-            <button id="darkModeToggle" onclick="toggleDarkMode()" class="btn btn-outline-secondary ms-2" type="button" style="border-color: var(--border-color); color: var(--primary-color); background: none;">
-                🌙 Dark Mode
-            </button>
+<body data-theme="{{ session.get('theme', 'light') }}">
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem;">
+            <a class="navbar-brand" href="{{ url_for('dashboard') if session.user_id else url_for('login') }}">
+                <i class="fas fa-chart-line"></i>
+                FinTrack
+            </a>
+            
+            <!-- Desktop Navigation -->
+            <ul class="navbar-nav" id="navbarNav">
+                {% if session.user_id %}
+                    <li><a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                    </a></li>
+                    <li><a class="nav-link {% if request.endpoint == 'transaction' %}active{% endif %}" href="{{ url_for('transaction') }}">
+                        <i class="fas fa-exchange-alt"></i> Transactions
+                    </a></li>
+                    <li><a class="nav-link {% if request.endpoint == 'budget' %}active{% endif %}" href="{{ url_for('budget') }}">
+                        <i class="fas fa-wallet"></i> Budget
+                    </a></li>
+                    <li><a class="nav-link {% if request.endpoint == 'profile' %}active{% endif %}" href="{{ url_for('profile') }}">
+                        <i class="fas fa-user"></i> Profile
+                    </a></li>
+                    <li><a class="nav-link" href="{{ url_for('logout') }}">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </a></li>
+                {% endif %}
+            </ul>
+            
+            <!-- Theme Toggle -->
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                {% if session.user_id %}
+                <!-- Notification Bell -->
+                <div class="notification-dropdown">
+                    <button class="notification-bell" id="notificationBell">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
+                    </button>
+                    <div class="notification-menu" id="notificationMenu">
+                        <div class="notification-item">
+                            <strong>Welcome to FinTrack!</strong><br>
+                            <small>Start by adding your first transaction</small>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Theme Toggle Button -->
+                <button class="theme-toggle" id="darkModeToggle" onclick="toggleDarkMode()">
+                    <i class="fas fa-moon"></i>
+                </button>
+                
+                <!-- Mobile Menu Toggle -->
+                <button class="navbar-toggler" id="navbarToggler">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
         </div>
     </nav>
-    <div class="container">
+
+    <!-- Alert Placeholder for JavaScript notifications -->
+    <div id="alert-placeholder" class="container" style="margin-top: 1rem;"></div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container" style="margin-top: 1rem;">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }}" style="animation: slideIn 0.3s ease;">
+                        {% if category == 'error' %}
+                            <i class="fas fa-exclamation-triangle"></i>
+                        {% elif category == 'success' %}
+                            <i class="fas fa-check-circle"></i>
+                        {% elif category == 'info' %}
+                            <i class="fas fa-info-circle"></i>
+                        {% elif category == 'warning' %}
+                            <i class="fas fa-exclamation-circle"></i>
+                        {% endif %}
+                        {{ message }}
+                        <button class="alert-close" onclick="this.parentElement.remove()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main>
         {% block content %}{% endblock %}
-    </div>
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Custom JS -->
+    </main>
+
+    <!-- Footer -->
+    <footer style="background-color: var(--bg-primary); border-top: 1px solid var(--border-color); margin-top: 2rem; padding: 2rem 0; text-align: center;">
+        <div class="container">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <p style="margin: 0; color: var(--text-secondary);">&copy; 2024 FinTrack. All rights reserved.</p>
+                </div>
+                <div>
+                    <p style="margin: 0; font-size: 0.875rem; color: var(--text-muted);">
+                        <i class="fas fa-shield-alt"></i> Secured by SSL | 
+                        <i class="fas fa-clock"></i> Session Active
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Your Custom JavaScript -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    {% block scripts %}{% endblock %}
+    
+    <!-- Additional Layout JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Mobile menu toggle
+            const navbarToggler = document.getElementById('navbarToggler');
+            const navbarNav = document.getElementById('navbarNav');
+            
+            if (navbarToggler && navbarNav) {
+                navbarToggler.addEventListener('click', function() {
+                    navbarNav.classList.toggle('show');
+                });
+            }
+
+            // Notification dropdown toggle
+            const notificationBell = document.getElementById('notificationBell');
+            const notificationMenu = document.getElementById('notificationMenu');
+            
+            if (notificationBell && notificationMenu) {
+                notificationBell.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    notificationMenu.classList.toggle('show');
+                });
+                
+                // Close notification menu when clicking outside
+                document.addEventListener('click', function() {
+                    notificationMenu.classList.remove('show');
+                });
+            }
+
+            // Auto-dismiss flash messages after 5 seconds
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(function(alert) {
+                setTimeout(function() {
+                    if (alert.parentNode) {
+                        alert.style.opacity = '0';
+                        alert.style.transform = 'translateY(-20px)';
+                        setTimeout(function() {
+                            if (alert.parentNode) {
+                                alert.remove();
+                            }
+                        }, 300);
+                    }
+                }, 5000);
+            });
+
+            // CSRF token for AJAX requests
+            const csrfToken = document.querySelector('meta[name="csrf-token"]');
+            if (csrfToken) {
+                window.csrfToken = csrfToken.getAttribute('content');
+            }
+
+            // Update theme toggle icon based on current theme
+            const themeToggle = document.getElementById('darkModeToggle');
+            if (themeToggle) {
+                const isDark = document.body.getAttribute('data-theme') === 'dark';
+                themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+            }
+        });
+
+        // Enhanced theme toggle function that updates the icon
+        function toggleDarkMode() {
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            if (isDark) {
+                document.body.removeAttribute('data-theme');
+                localStorage.setItem('theme', 'light');
+            } else {
+                document.body.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            
+            // Update toggle button icon
+            const btn = document.getElementById('darkModeToggle');
+            if (btn) {
+                btn.innerHTML = isDark ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
+            }
+        }
+    </script>
+    
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

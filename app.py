@@ -1,3 +1,111 @@
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, BooleanField, SubmitField
+from wtforms.validators import DataRequired, Length, Regexp
+# Flask-WTF configuration
+app.config['WTF_CSRF_ENABLED'] = True
+
+# Rate limiting configuration (by IP and username)
+RATE_LIMIT_ATTEMPTS = 5
+RATE_LIMIT_WINDOW = 300  # 5 minutes in seconds
+login_attempts = {}  # {ip: [timestamps], username: [timestamps]}
+
+# Flask-WTF LoginForm
+class LoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=50), Regexp(r'^[a-zA-Z0-9_.-]+$')])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=8)])
+    remember_me = BooleanField('Remember Me')
+    submit = SubmitField('Login')
+
+def check_rate_limit(ip_address, username=None):
+    import time
+    current_time = time.time()
+    # Clean old entries for IP
+    if ip_address in login_attempts:
+        login_attempts[ip_address] = [t for t in login_attempts[ip_address] if current_time - t < RATE_LIMIT_WINDOW]
+    # Clean old entries for username
+    if username and username in login_attempts:
+        login_attempts[username] = [t for t in login_attempts[username] if current_time - t < RATE_LIMIT_WINDOW]
+    # Check rate limit for IP
+    if ip_address in login_attempts and len(login_attempts[ip_address]) >= RATE_LIMIT_ATTEMPTS:
+        raise Exception(f"Too many login attempts from this IP. Please try again in {RATE_LIMIT_WINDOW // 60} minutes.")
+    # Check rate limit for username
+    if username and username in login_attempts and len(login_attempts[username]) >= RATE_LIMIT_ATTEMPTS:
+        raise Exception(f"Too many login attempts for this user. Please try again in {RATE_LIMIT_WINDOW // 60} minutes.")
+
+def record_login_attempt(ip_address, username=None):
+    import time
+    current_time = time.time()
+    if ip_address not in login_attempts:
+        login_attempts[ip_address] = []
+    login_attempts[ip_address].append(current_time)
+    if username:
+        if username not in login_attempts:
+            login_attempts[username] = []
+        login_attempts[username].append(current_time)
+
+def validate_credentials(username, password):
+    import re
+    # Input validation
+    if not username or not password:
+        raise Exception("Username and password are required.")
+    if not re.match(r'^[a-zA-Z0-9_.-]+$', username) or len(username) < 3 or len(username) > 50:
+        raise Exception("Invalid username format.")
+    # Password complexity
+    if len(password) < 8 or not re.search(r'[A-Z]', password) or not re.search(r'[a-z]', password) or not re.search(r'[0-9]', password) or not re.search(r'[^A-Za-z0-9]', password):
+        raise Exception("Password must be at least 8 characters and include uppercase, lowercase, digit, and special character.")
+    # Query user from database
+    user = db.execute('SELECT * FROM users WHERE username = ?', username)
+    if not user:
+        return False
+    from werkzeug.security import check_password_hash
+    if not check_password_hash(user[0]['password_hash'], password):
+        return False
+    return user[0]['id']
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+    if form.validate_on_submit():
+        try:
+            client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+            if ',' in client_ip:
+                client_ip = client_ip.split(',')[0].strip()
+            username = form.username.data.strip()
+            password = form.password.data
+            remember_me = form.remember_me.data
+            check_rate_limit(client_ip, username)
+            record_login_attempt(client_ip, username)
+            user_id = validate_credentials(username, password)
+            if user_id:
+                session.clear()
+                session['user_id'] = user_id
+                session['login_time'] = datetime.now().isoformat()
+                session['ip_address'] = client_ip
+                session.permanent = remember_me
+                # Clear rate limiting for successful login
+                if client_ip in login_attempts:
+                    del login_attempts[client_ip]
+                if username in login_attempts:
+                    del login_attempts[username]
+                flash('Login successful!', 'success')
+                next_page = request.args.get('next')
+                if next_page:
+                    return redirect(next_page)
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Invalid username or password.', 'error')
+        except Exception as e:
+            flash(str(e), 'error')
+            return render_template('login.html', form=form), 429
+    return render_template('login.html', form=form)
+
+@app.route('/logout', methods=['GET', 'POST'])
+def logout():
+    session.clear()
+    flash('You have been successfully logged out.', 'info')
+    return redirect(url_for('login'))
 import os
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from cs50 import SQL 
@@ -120,10 +228,10 @@ def init_db():
 #login
 @app.route("/login", methods = ["GET", "POST"])
 def login():
-    return redirect("/") 
-
+    return redirect("/dashboard") 
 # Homepage (Dashboard)
-@app.route("/")
+@app.route("/dashboard", methods=["GET", "POST"])
+@login_required
 def homepage():
     # Example: get user balance and recent transactions (static user for now)
     user_id = 1  # Placeholder, will use session later
@@ -131,8 +239,7 @@ def homepage():
     balance = user[0]["cash"] if user else 0
     transactions = db.execute("SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC LIMIT 5", user_id)
     return render_template("dashboard.html", balance=balance, transactions=transactions)
-def homepage():
-    return render_template("homepage.html")
+
 #transaction
 @app.route("/transactions", methods = ["GET", "POST"])
 @login_required

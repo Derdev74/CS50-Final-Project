@@ -1,0 +1,61 @@
+{% extends "layout.html" %}
+{% block title %}Dashboard - FinTrack{% endblock %}
+{% block content %}
+<h1 class="mb-4">Welcome to FinTrack</h1>
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-white bg-success mb-3">
+            <div class="card-header">Current Balance</div>
+            <div class="card-body">
+                <h4 class="card-title">${{ balance }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header">Recent Transactions</div>
+            <ul class="list-group list-group-flush">
+                {% for txn in transactions %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{ txn["description"] or "(No description)" }}</span>
+                    <span class="badge bg-primary">${{ txn["amount"] }}</span>
+                </li>
+                {% else %}
+                <li class="list-group-item">No recent transactions.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">Spending Chart</div>
+            <div class="card-body">
+                <canvas id="spendingChart" width="100%" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Placeholder for spending chart
+const ctx = document.getElementById('spendingChart').getContext('2d');
+const spendingChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Sample'],
+        datasets: [{
+            data: [100],
+            backgroundColor: ['#198754']
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } }
+    }
+});
+</script>
+{% endblock %}

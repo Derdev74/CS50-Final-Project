@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Verify Your FinTrack Account</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #2563eb 0%, #6366f1 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="margin: 0; font-size: 24px;">Welcome to FinTrack!</h1>
+        <p style="margin: 10px 0 0 0; font-size: 16px;">Please verify your email address</p>
+    </div>
+    
+    <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
+        <p>Hello {{ username }},</p>
+        
+        <p>Thank you for registering with FinTrack! To complete your account setup, please verify your email address by clicking the button below:</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{ verification_url }}" style="background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Verify Email Address</a>
+        </div>
+        
+        <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
+        <p style="word-break: break-all; background: #e2e8f0; padding: 10px; border-radius: 5px; font-family: monospace;">{{ verification_url }}</p>
+        
+        <p><strong>This link will expire in {{ expiry_hours }} hours for your security.</strong></p>
+        
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+        
+        <p style="font-size: 14px; color: #64748b;">If you didn't create this account, please ignore this email. Your email address will not be added to our system.</p>
+        
+        <p style="font-size: 14px; color: #64748b;">
+            Best regards,<br>
+            The FinTrack Team
+        </p>
+    </div>
+</body>
+</html>

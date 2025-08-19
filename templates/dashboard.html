@@ -1,36 +1,55 @@
+{#
+  Dashboard Page for FinTrack
+  - Extends the base layout.html
+  - Shows user balance, recent transactions, and a spending chart
+  - Uses Bootstrap for layout and styling
+  - Uses Jinja2 for dynamic content
+  - Integrates Chart.js for data visualization
+#}
 {% extends "layout.html" %}
+
+{# Set the page title #}
 {% block title %}Dashboard - FinTrack{% endblock %}
+
+{# Main content block #}
 {% block content %}
 <h1 class="mb-4">Welcome to FinTrack</h1>
+
+<!-- Balance Card -->
 <div class="row mb-4">
     <div class="col-md-4">
-        <div class="card text-white bg-success mb-3">
-            <div class="card-header">Current Balance</div>
+        <!-- Card for current balance, themed by CSS variables -->
+        <div class="card mb-3" style="background: var(--success-color); color: var(--bg-primary); box-shadow: var(--shadow-md);">
+            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color); color: var(--bg-primary);">Current Balance</div>
             <div class="card-body">
                 <h4 class="card-title">${{ balance }}</h4>
             </div>
         </div>
     </div>
 </div>
+
 <div class="row">
+    <!-- Recent Transactions List -->
     <div class="col-md-8">
-        <div class="card mb-3">
-            <div class="card-header">Recent Transactions</div>
+        <div class="card mb-3" style="box-shadow: var(--shadow-sm); background: var(--bg-primary); color: var(--text-primary);">
+            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color);">Recent Transactions</div>
             <ul class="list-group list-group-flush">
                 {% for txn in transactions %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
+                <li class="list-group-item d-flex justify-content-between align-items-center" style="background: var(--bg-secondary); color: var(--text-primary);">
                     <span>{{ txn["description"] or "(No description)" }}</span>
-                    <span class="badge bg-primary">${{ txn["amount"] }}</span>
+                    <span class="badge" style="background: var(--primary-color); color: var(--bg-primary);">${{ txn["amount"] }}</span>
                 </li>
                 {% else %}
-                <li class="list-group-item">No recent transactions.</li>
+                <li class="list-group-item" style="background: var(--bg-secondary); color: var(--text-muted);">No recent transactions.</li>
                 {% endfor %}
             </ul>
         </div>
     </div>
+
+    <!-- Spending Chart Card -->
     <div class="col-md-4">
-        <div class="card mb-3">
-            <div class="card-header">Spending Chart</div>
+        <div class="card mb-3" style="box-shadow: var(--shadow-sm); background: var(--bg-primary); color: var(--text-primary);">
+            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color);">Spending Chart</div>
             <div class="card-body">
                 <canvas id="spendingChart" width="100%" height="100"></canvas>
             </div>
@@ -38,18 +57,22 @@
     </div>
 </div>
 {% endblock %}
+
+{# Scripts block for page-specific JS #}
 {% block scripts %}
+<!-- Load Chart.js from CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Placeholder for spending chart
+// Chart.js: Render a placeholder doughnut chart
+// In production, replace with real data from Flask/Jinja
 const ctx = document.getElementById('spendingChart').getContext('2d');
 const spendingChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
-        labels: ['Sample'],
+        labels: ['Sample'], // Replace with categories
         datasets: [{
-            data: [100],
-            backgroundColor: ['#198754']
+            data: [100], // Replace with actual spending data
+            backgroundColor: ['#198754'] // Bootstrap green
         }]
     },
     options: {

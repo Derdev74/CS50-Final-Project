@@ -1,0 +1,47 @@
+/* main.css - Custom styles for FinTrack */
+
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+.navbar-brand {
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.card {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.card-header {
+    font-weight: 500;
+}
+
+.badge {
+    font-size: 1em;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+    .card-title {
+        font-size: 1.2em;
+    }
+}
+
+/* Dark mode (to be toggled with JS) */
+body.dark-mode {
+    background-color: #181a1b;
+    color: #e0e0e0;
+}
+body.dark-mode .card {
+    background-color: #23272b;
+    color: #e0e0e0;
+}
+body.dark-mode .navbar {
+    background-color: #23272b !important;
+}
+body.dark-mode .list-group-item {
+    background-color: #23272b;
+    color: #e0e0e0;
+}

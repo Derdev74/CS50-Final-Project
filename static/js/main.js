@@ -20,7 +20,7 @@ function toggleDarkMode() {
     // Update toggle button UI if present
     const btn = document.getElementById('darkModeToggle');
     if (btn) {
-        btn.innerHTML = isDark ? '🌙 Dark Mode' : '☀️ Light Mode';
+        btn.innerHTML = isDark ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
     }
 }
 
@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Set toggle button text/icon
     const btn = document.getElementById('darkModeToggle');
     if (btn) {
-        btn.innerHTML = document.body.getAttribute('data-theme') === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+        btn.innerHTML = document.body.getAttribute('data-theme') === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
     }
 });
 

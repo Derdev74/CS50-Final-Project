@@ -1,0 +1,125 @@
+{% extends "layout.html" %}
+
+{% block title %}Error {{ top }} - FinTrack{% endblock %}
+
+{% block meta_description %}An error occurred. Please try again.{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card" style="max-width: 500px;">
+        <!-- Error Header -->
+        <div class="auth-header">
+            <!-- Error Icon based on error code -->
+            {% if top == 404 %}
+                <i class="fas fa-search" style="font-size: 4rem; color: var(--warning-color); margin-bottom: var(--spacing-md);"></i>
+            {% elif top == 403 %}
+                <i class="fas fa-lock" style="font-size: 4rem; color: var(--danger-color); margin-bottom: var(--spacing-md);"></i>
+            {% elif top == 401 %}
+                <i class="fas fa-user-lock" style="font-size: 4rem; color: var(--danger-color); margin-bottom: var(--spacing-md);"></i>
+            {% elif top == 500 %}
+                <i class="fas fa-server" style="font-size: 4rem; color: var(--danger-color); margin-bottom: var(--spacing-md);"></i>
+            {% else %}
+                <i class="fas fa-exclamation-triangle" style="font-size: 4rem; color: var(--warning-color); margin-bottom: var(--spacing-md);"></i>
+            {% endif %}
+            
+            <!-- Error Code -->
+            <h1 style="font-size: 4rem; font-weight: 700; margin: 0; color: var(--text-primary);">
+                {{ top }}
+            </h1>
+            
+            <!-- Error Title -->
+            <h2 style="font-size: 1.5rem; margin: var(--spacing-md) 0;">
+                {% if top == 404 %}
+                    Page Not Found
+                {% elif top == 403 %}
+                    Access Forbidden
+                {% elif top == 401 %}
+                    Authentication Required
+                {% elif top == 500 %}
+                    Internal Server Error
+                {% else %}
+                    Oops! Something went wrong
+                {% endif %}
+            </h2>
+        </div>
+
+        <!-- Error Message -->
+        <div class="alert alert-danger" style="margin-bottom: var(--spacing-lg);">
+            <i class="fas fa-exclamation-circle"></i>
+            <strong>Error Details:</strong><br>
+            {{ bottom }}
+        </div>
+
+        <!-- Helpful Information -->
+        <div style="text-align: center; color: var(--text-secondary); margin-bottom: var(--spacing-lg);">
+            {% if top == 404 %}
+                <p>The page you're looking for doesn't exist. It might have been moved or deleted.</p>
+            {% elif top == 403 %}
+                <p>You don't have permission to access this resource.</p>
+            {% elif top == 401 %}
+                <p>Please log in to access this page.</p>
+            {% elif top == 500 %}
+                <p>We're experiencing technical difficulties. Please try again later.</p>
+            {% else %}
+                <p>An unexpected error occurred. Please try again or contact support if the problem persists.</p>
+            {% endif %}
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: var(--spacing-md); justify-content: center;">
+            <!-- Go Back Button -->
+            <button onclick="history.back()" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Go Back
+            </button>
+            
+            <!-- Home Button -->
+            <a href="{{ url_for('dashboard') if session.user_id else url_for('login') }}" class="btn btn-primary">
+                <i class="fas fa-home"></i> 
+                {% if session.user_id %}
+                    Dashboard
+                {% else %}
+                    Login Page
+                {% endif %}
+            </a>
+        </div>
+
+        <!-- Additional Help -->
+        <div style="margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-color); text-align: center;">
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0;">
+                Error Code: {{ top }} | 
+                {% if session.user_id %}
+                    User: {{ session.username }} | 
+                {% endif %}
+                Time: <span id="errorTime"></span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Optional: Meme-style image (CS50 Finance style) -->
+    {% if top == 404 %}
+    <div style="text-align: center; margin-top: var(--spacing-lg);">
+        <img src="https://http.cat/404" alt="404 Cat" style="max-width: 300px; border-radius: var(--radius-lg); opacity: 0.8;">
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Display current time
+    const errorTime = document.getElementById('errorTime');
+    if (errorTime) {
+        const now = new Date();
+        errorTime.textContent = now.toLocaleString();
+    }
+    
+    // Auto-redirect for certain errors (optional)
+    {% if top == 401 %}
+    setTimeout(function() {
+        window.location.href = "{{ url_for('login') }}";
+    }, 5000); // Redirect to login after 5 seconds for 401 errors
+    {% endif %}
+});
+</script>
+{% endblock %}

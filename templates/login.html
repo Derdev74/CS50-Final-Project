@@ -320,7 +320,7 @@
                 
                 <!-- Username Field -->
                 <div class="form-floating">
-                    {{ form.username(class="form-control", id="floatingUsername", placeholder=" ", autocomplete="username", required=true) }}
+                    {{ form.username(class="form-control", id="floatingUsername", placeholder="Username", autocomplete="username", required=true) }}
                     {{ form.username.label(for="floatingUsername") }}
                     {% if form.username.errors %}
                         <div class="invalid-feedback d-block">
@@ -334,7 +334,7 @@
                 <!-- Password Field -->
                 <div class="form-floating">
                     <div class="password-field-container">
-                        {{ form.password(class="form-control", id="floatingPassword", placeholder=" ", autocomplete="current-password", required=true, style="padding-right: 3rem;") }}
+                        {{ form.password(class="form-control", id="floatingPassword", placeholder="Password", autocomplete="current-password", required=true, style="padding-right: 3rem;") }}
                         <button class="password-toggle" type="button" id="togglePassword">
                             <i class="fas fa-eye" id="toggleIcon"></i>
                         </button>
@@ -361,7 +361,8 @@
                         {{ form.remember_me(class="form-check-input", id="rememberMe") }}
                         {{ form.remember_me.label(class="form-check-label", for="rememberMe") }}
                     </div>
-                    <a href="#" class="forgot-password">
+                    <!-- Use url_for for Forgot Password link -->
+                    <a href="{{ url_for('forgot_password') }}" class="forgot-password">
                         <i class="fas fa-question-circle"></i> Forgot Password?
                     </a>
                 </div>
@@ -378,7 +379,8 @@
             <!-- Login Footer -->
             <div class="login-footer">
                 <p>Don't have an account?</p>
-                <a href="#" class="register-link">
+                <!-- Use url_for for Create Account link -->
+                <a href="{{ url_for('register') }}" class="register-link">
                     <i class="fas fa-user-plus"></i> Create an Account
                 </a>
             </div>

@@ -1,4 +1,6 @@
+
 from flask_wtf import FlaskForm
+from dotenv import load_dotenv
 from wtforms import StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Length, Regexp, Email, EqualTo
 import re
@@ -7,8 +9,8 @@ import logging
 import time
 import secrets
 import smtplib
-from email.mime.text import MimeText
-from email.mime.multipart import MimeMultipart
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from cs50 import SQL 
 from flask_session import Session
@@ -17,8 +19,148 @@ from datetime import datetime, timedelta
 from helpers import apology, login_required
 import hashlib
 import urllib.parse
-# Import service classes
 from services import AuthService, UserService
+from flask_wtf.csrf import generate_csrf
+
+# --- Robust database initialization from database setup.md ---
+import sqlite3
+import threading
+from pathlib import Path
+
+class DatabaseInitializer:
+    def __init__(self, db_path):
+        self.db_path = Path(db_path).resolve()
+        self._init_lock = threading.Lock()
+        self._initialized = False
+    def initialize_database(self):
+        if self._initialized:
+            return
+        with self._init_lock:
+            if self._initialized:
+                return
+            self._ensure_database_file_exists()
+            self._create_schema()
+            self._initialized = True
+    def _ensure_database_file_exists(self):
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.db_path.exists():
+            conn = sqlite3.connect(str(self.db_path))
+            conn.close()
+    def _create_schema(self):
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            with conn:
+                # Users table
+                conn.execute('''
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    email_verified BOOLEAN DEFAULT FALSE,
+    email_verification_token TEXT,
+    email_verification_expires TIMESTAMP,
+    password_reset_token TEXT,
+    password_reset_expires TIMESTAMP,
+    google_id TEXT,
+    oauth_provider TEXT,
+    cash NUMERIC NOT NULL DEFAULT 10000.00,
+    theme TEXT DEFAULT 'light',
+    failed_login_attempts INTEGER DEFAULT 0,
+    locked_until TIMESTAMP NULL,
+    last_login TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+                ''')
+                # Categories table
+                conn.execute('''
+CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    type TEXT CHECK(type IN ('income', 'expense')) NOT NULL
+)
+                ''')
+                # Transactions table
+                conn.execute('''
+CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    category_id INTEGER,
+    amount NUMERIC NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    description TEXT,
+    date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+)
+                ''')
+                # Budgets table
+                conn.execute('''
+CREATE TABLE IF NOT EXISTS budgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    category_id INTEGER,
+    amount NUMERIC NOT NULL,
+    period TEXT CHECK(period IN ('weekly', 'monthly', 'yearly')) NOT NULL,
+    start_date DATE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id)
+)
+                ''')
+                # Goals table
+                conn.execute('''
+CREATE TABLE IF NOT EXISTS goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    target_amount NUMERIC NOT NULL,
+    current_amount NUMERIC DEFAULT 0,
+    deadline DATE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)
+                ''')
+                # Security audit log table
+                conn.execute('''
+CREATE TABLE IF NOT EXISTS security_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    event_type TEXT NOT NULL,
+    ip_address TEXT,
+    user_agent TEXT,
+    details TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)
+                ''')
+                # Email verification attempts table
+                conn.execute('''
+CREATE TABLE IF NOT EXISTS email_verification_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    ip_address TEXT,
+    attempts INTEGER DEFAULT 1,
+    last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    blocked_until TIMESTAMP
+)
+                ''')
+                # Indexes for optimization
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_txn_category ON transactions(category_id)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, timestamp)')
+        finally:
+            conn.close()
+
+def get_database_path():
+    if os.environ.get('FLASK_ENV') == 'production':
+        return Path('/var/data/fintrack/fintrack.db')
+    else:
+        return Path(__file__).parent / 'instance' / 'fintrack.db'
+
+DATABASE_PATH = get_database_path()
+initializer = DatabaseInitializer(DATABASE_PATH)
+initializer.initialize_database()
+# --- End robust database initialization ---
 
 # Configure logging for security events
 logging.basicConfig(
@@ -31,77 +173,163 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+load_dotenv()
+# --- Robust database initialization (from database setup.md) ---
+import sqlite3
+from pathlib import Path
+
+# Use absolute path for database
+db_dir = Path(__file__).parent / "instance"
+db_dir.mkdir(parents=True, exist_ok=True)
+db_path = db_dir / "fintrack.db"
+
+# Create database file and schema if needed
+if not db_path.exists():
+    conn = sqlite3.connect(str(db_path))
+    with conn:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # Add other tables as needed, e.g. transactions, categories, etc.
+    conn.close()
+# --- End robust database initialization ---
+
+
 # Initialize Flask app
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+app.config['REGISTRATION_ENABLED'] = True  # Allow registration by default
 
-# Enhanced Flask session configuration for production
-app.config.update(
-    SECRET_KEY=os.environ.get('SECRET_KEY') or secrets.token_urlsafe(32),
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=int(os.environ.get('SESSION_TIMEOUT_HOURS', '2'))),
-    
-    # Security configurations
-    SESSION_COOKIE_SECURE=os.environ.get('FLASK_ENV') == 'production',
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    
-    # Flask-Session
-    SESSION_PERMANENT=False,
-    SESSION_TYPE="filesystem",
-    
-    # Flask-WTF
-    WTF_CSRF_ENABLED=True,
-    WTF_CSRF_TIME_LIMIT=3600,  # 1 hour
-    
-    # Email configuration
-    MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.gmail.com'),
-    MAIL_PORT=int(os.environ.get('MAIL_PORT', '587')),
-    MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true',
-    MAIL_USERNAME=os.environ.get('MAIL_USERNAME'),
-    MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD'),
-    MAIL_DEFAULT_SENDER=os.environ.get('MAIL_DEFAULT_SENDER'),
-    
-    # Application settings
-    REGISTRATION_ENABLED=os.environ.get('REGISTRATION_ENABLED', 'True').lower() == 'true',
-    PASSWORD_RESET_ENABLED=os.environ.get('PASSWORD_RESET_ENABLED', 'True').lower() == 'true',
-    PASSWORD_RESET_TIMEOUT=int(os.environ.get('PASSWORD_RESET_TIMEOUT_MINUTES', '30')),
-)
+# Initialize database connection (after robust init)
+db = SQL(f"sqlite:///{DATABASE_PATH}")
 
-Session(app)
-
-
-# Create the database
-db = SQL("sqlite:///database.db")
-
-# Initialize service classes
+# Instantiate service classes with required dependencies
 user_service = UserService(db)
 auth_service = AuthService(user_service)
 
+# Enhanced Flask session configuration for production
 def init_db():
     """Initialize the database with necessary tables"""
-    
-    # Enhanced users table with email verification and password reset
+    # Users table
     db.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            email_verified BOOLEAN DEFAULT FALSE,
-            email_verification_token TEXT,
-            email_verification_expires TIMESTAMP,
-            password_reset_token TEXT,
-            password_reset_expires TIMESTAMP,
-            google_id TEXT,
-            oauth_provider TEXT,
-            cash NUMERIC NOT NULL DEFAULT 10000.00,
-            theme TEXT DEFAULT 'light',
-            failed_login_attempts INTEGER DEFAULT 0,
-            locked_until TIMESTAMP NULL,
-            last_login TIMESTAMP NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    email_verified BOOLEAN DEFAULT FALSE,
+    email_verification_token TEXT,
+    email_verification_expires TIMESTAMP,
+    password_reset_token TEXT,
+    password_reset_expires TIMESTAMP,
+    google_id TEXT,
+    oauth_provider TEXT,
+    cash NUMERIC NOT NULL DEFAULT 10000.00,
+    theme TEXT DEFAULT 'light',
+    failed_login_attempts INTEGER DEFAULT 0,
+    locked_until TIMESTAMP NULL,
+    last_login TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
+    # Categories table
+    db.execute('''
+CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    type TEXT CHECK(type IN ('income', 'expense')) NOT NULL
+)
+''')
+    # Transactions table
+    db.execute('''
+CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    category_id INTEGER,
+    amount NUMERIC NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    description TEXT,
+    date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+)
+''')
+    # Budgets table
+    db.execute('''
+CREATE TABLE IF NOT EXISTS budgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    category_id INTEGER,
+    amount NUMERIC NOT NULL,
+    period TEXT CHECK(period IN ('weekly', 'monthly', 'yearly')) NOT NULL,
+    start_date DATE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id)
+)
+''')
+    # Goals table
+    db.execute('''
+CREATE TABLE IF NOT EXISTS goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    target_amount NUMERIC NOT NULL,
+    current_amount NUMERIC DEFAULT 0,
+    deadline DATE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)
+''')
+    # Security audit log table
+    db.execute('''
+CREATE TABLE IF NOT EXISTS security_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    event_type TEXT NOT NULL,
+    ip_address TEXT,
+    user_agent TEXT,
+    details TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)
+''')
+    # Email verification attempts table
+    db.execute('''
+CREATE TABLE IF NOT EXISTS email_verification_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    ip_address TEXT,
+    attempts INTEGER DEFAULT 1,
+    last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    blocked_until TIMESTAMP
+)
+''')
+    # Indexes for optimization
+    db.execute('CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_txn_category ON transactions(category_id)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, timestamp)')
+    # Insert default categories
+    default_categories = [
+        ('Food & Dining', 'expense'),
+        ('Transportation', 'expense'),
+        ('Shopping', 'expense'),
+        ('Entertainment', 'expense'),
+        ('Bills & Utilities', 'expense'),
+        ('Healthcare', 'expense'),
+        ('Salary', 'income'),
+        ('Freelance', 'income'),
+        ('Investments', 'income'),
+        ('Other Income', 'income')
+    ]
+    for name, cat_type in default_categories:
+        db.execute('INSERT OR IGNORE INTO categories (name, type) VALUES (?, ?)', name, cat_type)
     
     # Categories table
     db.execute('''
@@ -335,14 +563,14 @@ def send_email(to_email, subject, template_name, **template_vars):
         text_body = render_template(f'emails/{template_name}.txt', **template_vars)
         
         # Create message
-        msg = MimeMultipart('alternative')
+        msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
         msg['From'] = app.config['MAIL_DEFAULT_SENDER']
         msg['To'] = to_email
         
         # Attach parts
-        part1 = MimeText(text_body, 'plain')
-        part2 = MimeText(html_body, 'html')
+        part1 = MIMEText(text_body, 'plain')
+        part2 = MIMEText(html_body, 'html')
         msg.attach(part1)
         msg.attach(part2)
         
@@ -477,6 +705,7 @@ def validate_session():
     return True
 
 def is_safe_url(target):
+
     """Check if a redirect URL is safe to prevent open redirect attacks"""
     from urllib.parse import urlparse, urljoin
     
@@ -484,7 +713,9 @@ def is_safe_url(target):
     test_url = urlparse(urljoin(request.host_url, target))
     
     return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
-
+@app.context_processor
+def inject_csrf_token():
+    return dict(csrf_token=generate_csrf)
 # Routes
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -559,7 +790,8 @@ def register():
                 flash('Registration failed. Please try again later.', 'error')
                 
         except Exception as e:
-            flash(str(e), 'error')
+            logger.error(f"Registration failed: {e}")
+            flash('Registration failed. Please try again later.', 'error')
     
     return render_template('register.html', form=form)
 
@@ -835,11 +1067,18 @@ def internal_error(error):
 def rate_limit_error(error):
     return render_template('rate_limit.html'), 429
 
-if __name__ == '__main__':
+@app.after_request
+def security_headers(response):
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    return response
 
+if __name__ == '__main__':
+    """Run the Flask application with enhanced security features"""
     # Initialiser la base de données au démarrage
     init_db()
-    
+
     # Production security checks
     if os.environ.get('FLASK_ENV') == 'production':
         required_env_vars = [

@@ -133,5 +133,58 @@ function focusFirstInvalid(formId) {
 }
 
 // ===============================
+// AJAX for Add/Delete Transaction (Transactions Page)
+// ===============================
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Add Transaction via AJAX
+    const addForm = document.getElementById('add-transaction-form');
+    if (addForm) {
+        addForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(addForm);
+            fetch(addForm.action, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    showAlert(data.message || 'Failed to add transaction.', 'danger');
+                }
+            })
+            .catch(() => showAlert('Failed to add transaction.', 'danger'));
+        });
+    }
+
+    // Delete Transaction via AJAX
+    document.querySelectorAll('.delete-transaction-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!confirm('Delete this transaction?')) return;
+            const formData = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    form.closest('tr').remove();
+                    showAlert('Transaction deleted successfully!', 'success');
+                } else {
+                    showAlert(data.message || 'Failed to delete transaction.', 'danger');
+                }
+            })
+            .catch(() => showAlert('Failed to delete transaction.', 'danger'));
+        });
+    });
+});
+
+// ===============================
 // END OF main.js
 // ===============================

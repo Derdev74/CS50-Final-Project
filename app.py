@@ -21,6 +21,7 @@ import hashlib
 import urllib.parse
 from services import AuthService, UserService
 from flask_wtf.csrf import generate_csrf
+from decimal import Decimal, InvalidOperation
 
 # --- Robust database initialization from database setup.md ---
 import sqlite3
@@ -1041,10 +1042,339 @@ def dashboard():
 # Other routes remain the same but should include session validation
 @app.route("/transactions", methods=["GET", "POST"])
 @login_required
-def transaction():
+from decimal import Decimal, InvalidOperation
+
+@app.route("/transactions", methods=["GET"])
+@login_required
+def transactions():
+    """Display all transactions for the user with secure filtering"""
     if not validate_session():
         return redirect(url_for('login'))
-    return render_template("transaction.html")
+    
+    user_id = session.get('user_id')
+    
+    # Validate and sanitize filter parameters
+    try:
+        # Category filter with validation
+        category_filter = request.args.get('category', type=int)
+        if category_filter and category_filter <= 0:
+            category_filter = None
+            
+        # Date validation
+        date_from = request.args.get('from', '').strip()
+        date_to = request.args.get('to', '').strip()
+        
+        # Validate date format if provided
+        if date_from:
+            datetime.strptime(date_from, '%Y-%m-%d')
+        if date_to:
+            datetime.strptime(date_to, '%Y-%m-%d')
+            
+        # Search with length limit and sanitization
+        search = request.args.get('search', '').strip()[:100]
+        
+        # Escape special LIKE characters
+        if search:
+            search = search.replace('\\', '\\\\')
+            search = search.replace('%', '\\%')
+            search = search.replace('_', '\\_')
+            
+    except ValueError as e:
+        flash('Invalid filter parameters.', 'warning')
+        return redirect(url_for('transactions'))
+    
+    # Build query with parameterized values
+    query = """
+        SELECT t.*, c.name as category_name, c.type as category_type 
+        FROM transactions t 
+        LEFT JOIN categories c ON t.category_id = c.id 
+        WHERE t.user_id = ?
+    """
+    params = [user_id]
+    
+    if category_filter:
+        query += " AND t.category_id = ?"
+        params.append(category_filter)
+    
+    if date_from:
+        query += " AND DATE(t.date) >= ?"
+        params.append(date_from)
+    
+    if date_to:
+        query += " AND DATE(t.date) <= ?"
+        params.append(date_to)
+    
+    if search:
+        query += " AND t.description LIKE ? ESCAPE '\\'"
+        params.append(f'%{search}%')
+    
+    query += " ORDER BY t.date DESC, t.id DESC LIMIT 1000"  # Limit results
+    
+    try:
+        transactions = db.execute(query, *params)
+    except Exception as e:
+        logger.error(f"Error fetching transactions: {str(e)}")
+        flash('Failed to load transactions.', 'error')
+        transactions = []
+    
+    # Get categories for filter dropdown
+    categories = db.execute("SELECT * FROM categories ORDER BY type, name")
+    
+    # Calculate totals safely
+    total_income = sum(Decimal(str(t['amount'])) for t in transactions 
+                      if t.get('category_type') == 'income')
+    total_expense = sum(abs(Decimal(str(t['amount']))) for t in transactions 
+                       if t.get('category_type') == 'expense')
+    
+    return render_template("transactions.html", 
+                         transactions=transactions,
+                         categories=categories,
+                         total_income=float(total_income),
+                         total_expense=float(total_expense),
+                         filters={
+                             'category': category_filter,
+                             'date_from': date_from,
+                             'date_to': date_to,
+                             'search': search.replace('\\\\', '\\').replace('\\%', '%').replace('\\_', '_')
+                         })
+
+@app.route("/transaction/add", methods=["POST"])
+@login_required
+def add_transaction():
+    """Add a new transaction with comprehensive validation"""
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Validate amount
+    amount_str = request.form.get('amount', '').strip()
+    if not amount_str:
+        flash('Amount is required.', 'error')
+        return redirect(url_for('transactions'))
+    
+    try:
+        amount = Decimal(amount_str)
+        
+        # Validate reasonable amount (prevent overflow)
+        if amount <= 0:
+            flash('Amount must be positive.', 'error')
+            return redirect(url_for('transactions'))
+        
+        if amount > Decimal('999999999.99'):
+            flash('Amount is too large.', 'error')
+            return redirect(url_for('transactions'))
+            
+    except (InvalidOperation, ValueError):
+        flash('Invalid amount format. Please enter a valid number.', 'error')
+        return redirect(url_for('transactions'))
+    
+    # Validate category
+    category_id = request.form.get('category_id', type=int)
+    if not category_id or category_id <= 0:
+        flash('Please select a valid category.', 'error')
+        return redirect(url_for('transactions'))
+    
+    # Validate description
+    description = request.form.get('description', '').strip()[:500]  # Limit length
+    
+    # Validate date
+    date_str = request.form.get('date', '').strip()
+    if not date_str:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    else:
+        try:
+            # Validate date format and range
+            transaction_date = datetime.strptime(date_str, '%Y-%m-%d')
+            
+            # Don't allow future dates too far ahead
+            if transaction_date > datetime.now() + timedelta(days=30):
+                flash('Transaction date cannot be more than 30 days in the future.', 'error')
+                return redirect(url_for('transactions'))
+                
+            # Don't allow dates too far in the past
+            if transaction_date < datetime.now() - timedelta(days=365*5):
+                flash('Transaction date cannot be more than 5 years in the past.', 'error')
+                return redirect(url_for('transactions'))
+                
+        except ValueError:
+            flash('Invalid date format.', 'error')
+            return redirect(url_for('transactions'))
+    
+    try:
+        # Verify category exists and belongs to valid types
+        category = db.execute("""
+            SELECT type FROM categories 
+            WHERE id = ? AND type IN ('income', 'expense')
+        """, category_id)
+        
+        if not category:
+            flash('Invalid category selected.', 'error')
+            return redirect(url_for('transactions'))
+        
+        # Adjust amount sign based on category type
+        if category[0]['type'] == 'expense':
+            amount = -abs(amount)
+        else:
+            amount = abs(amount)
+        
+        # Begin transaction for atomicity
+        # Insert transaction
+        transaction_id = db.execute("""
+            INSERT INTO transactions (user_id, category_id, amount, description, date, currency)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, user_id, category_id, float(amount), description, date_str, 'USD')
+        
+        # Update user's cash balance
+        db.execute("""
+            UPDATE users 
+            SET cash = cash + ?, updated_at = ? 
+            WHERE id = ?
+        """, float(amount), datetime.now().isoformat(), user_id)
+        
+        flash('Transaction added successfully!', 'success')
+        log_security_event(user_id, 'TRANSACTION_ADDED', 
+                         f'ID: {transaction_id}, Amount: {amount}, Category: {category_id}')
+        
+    except Exception as e:
+        logger.error(f"Error adding transaction for user {user_id}: {str(e)}")
+        flash('Failed to add transaction. Please try again.', 'error')
+    
+    return redirect(url_for('transactions'))
+
+@app.route("/transaction/<int:transaction_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_transaction(transaction_id):
+    """Edit an existing transaction"""
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Verify transaction belongs to user
+    transaction = db.execute("""
+        SELECT t.*, c.type as category_type 
+        FROM transactions t
+        JOIN categories c ON t.category_id = c.id
+        WHERE t.id = ? AND t.user_id = ?
+    """, transaction_id, user_id)
+    
+    if not transaction:
+        flash('Transaction not found.', 'error')
+        return redirect(url_for('transactions'))
+    
+    transaction = transaction[0]
+    
+    if request.method == "POST":
+        # Similar validation as add_transaction
+        amount_str = request.form.get('amount', '').strip()
+        if not amount_str:
+            flash('Amount is required.', 'error')
+            return redirect(url_for('edit_transaction', transaction_id=transaction_id))
+        
+        try:
+            new_amount = Decimal(amount_str)
+            if new_amount <= 0 or new_amount > Decimal('999999999.99'):
+                flash('Invalid amount.', 'error')
+                return redirect(url_for('edit_transaction', transaction_id=transaction_id))
+        except (InvalidOperation, ValueError):
+            flash('Invalid amount format.', 'error')
+            return redirect(url_for('edit_transaction', transaction_id=transaction_id))
+        
+        category_id = request.form.get('category_id', type=int)
+        description = request.form.get('description', '').strip()[:500]
+        date_str = request.form.get('date', '').strip()
+        
+        try:
+            # Get new category type
+            category = db.execute("SELECT type FROM categories WHERE id = ?", category_id)
+            if not category:
+                flash('Invalid category.', 'error')
+                return redirect(url_for('edit_transaction', transaction_id=transaction_id))
+            
+            # Adjust amount sign
+            if category[0]['type'] == 'expense':
+                new_amount = -abs(new_amount)
+            else:
+                new_amount = abs(new_amount)
+            
+            # Calculate balance adjustment
+            old_amount = Decimal(str(transaction['amount']))
+            balance_adjustment = new_amount - old_amount
+            
+            # Update transaction
+            db.execute("""
+                UPDATE transactions 
+                SET category_id = ?, amount = ?, description = ?, date = ?
+                WHERE id = ? AND user_id = ?
+            """, category_id, float(new_amount), description, date_str, 
+                transaction_id, user_id)
+            
+            # Update user balance
+            db.execute("""
+                UPDATE users 
+                SET cash = cash + ?, updated_at = ?
+                WHERE id = ?
+            """, float(balance_adjustment), datetime.now().isoformat(), user_id)
+            
+            flash('Transaction updated successfully!', 'success')
+            log_security_event(user_id, 'TRANSACTION_EDITED', f'ID: {transaction_id}')
+            return redirect(url_for('transactions'))
+            
+        except Exception as e:
+            logger.error(f"Error editing transaction: {str(e)}")
+            flash('Failed to update transaction.', 'error')
+    
+    # GET request - show edit form
+    categories = db.execute("SELECT * FROM categories ORDER BY type, name")
+    return render_template("edit_transaction.html", 
+                         transaction=transaction, 
+                         categories=categories)
+
+@app.route("/transaction/<int:transaction_id>/delete", methods=["POST"])
+@login_required
+def delete_transaction(transaction_id):
+    """Delete a transaction with proper validation and atomicity"""
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Verify transaction belongs to user and get amount
+        transaction = db.execute("""
+            SELECT id, amount FROM transactions 
+            WHERE id = ? AND user_id = ?
+        """, transaction_id, user_id)
+        
+        if not transaction:
+            flash('Transaction not found or access denied.', 'error')
+            return redirect(url_for('transactions'))
+        
+        amount = Decimal(str(transaction[0]['amount']))
+        
+        # Delete transaction
+        db.execute("""
+            DELETE FROM transactions 
+            WHERE id = ? AND user_id = ?
+        """, transaction_id, user_id)
+        
+        # Reverse the balance change
+        db.execute("""
+            UPDATE users 
+            SET cash = cash - ?, updated_at = ?
+            WHERE id = ?
+        """, float(amount), datetime.now().isoformat(), user_id)
+        
+        flash('Transaction deleted successfully!', 'success')
+        log_security_event(user_id, 'TRANSACTION_DELETED', 
+                         f'ID: {transaction_id}, Amount: {amount}')
+        
+    except Exception as e:
+        logger.error(f"Error deleting transaction {transaction_id}: {str(e)}")
+        flash('Failed to delete transaction. Please try again.', 'error')
+    
+    return redirect(url_for('transactions'))
 
 @app.route("/budget", methods=["GET", "POST"])
 @login_required

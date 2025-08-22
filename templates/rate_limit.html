@@ -1,0 +1,7 @@
+{% extends "layout.html" %}
+{% block title %}Rate Limit Exceeded{% endblock %}
+{% block content %}
+    <h1>Rate Limit Exceeded</h1>
+    <p>You have exceeded the number of allowed requests. Please try again later.</p>
+    <a href="{{ url_for('dashboard') }}">Go to Dashboard</a>
+{% endblock %}

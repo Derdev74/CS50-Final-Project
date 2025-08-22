@@ -1040,9 +1040,6 @@ def dashboard():
         return redirect(url_for('login'))
 
 # Other routes remain the same but should include session validation
-@app.route("/transactions", methods=["GET", "POST"])
-@login_required
-from decimal import Decimal, InvalidOperation
 
 @app.route("/transactions", methods=["GET"])
 @login_required
@@ -1138,7 +1135,7 @@ def transactions():
                              'search': search.replace('\\\\', '\\').replace('\\%', '%').replace('\\_', '_')
                          })
 
-@app.route("/transaction/add", methods=["POST"])
+@app.route("/transactions/add", methods=["POST"])
 @login_required
 def add_transaction():
     """Add a new transaction with comprehensive validation"""
@@ -1242,7 +1239,7 @@ def add_transaction():
     
     return redirect(url_for('transactions'))
 
-@app.route("/transaction/<int:transaction_id>/edit", methods=["GET", "POST"])
+@app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_transaction(transaction_id):
     """Edit an existing transaction"""
@@ -1252,18 +1249,18 @@ def edit_transaction(transaction_id):
     user_id = session.get('user_id')
     
     # Verify transaction belongs to user
-    transaction = db.execute("""
+    transactions = db.execute("""
         SELECT t.*, c.type as category_type 
         FROM transactions t
         JOIN categories c ON t.category_id = c.id
         WHERE t.id = ? AND t.user_id = ?
     """, transaction_id, user_id)
     
-    if not transaction:
+    if not transactions:
         flash('Transaction not found.', 'error')
         return redirect(url_for('transactions'))
     
-    transaction = transaction[0]
+    transactions = transactions[0]
     
     if request.method == "POST":
         # Similar validation as add_transaction
@@ -1299,7 +1296,7 @@ def edit_transaction(transaction_id):
                 new_amount = abs(new_amount)
             
             # Calculate balance adjustment
-            old_amount = Decimal(str(transaction['amount']))
+            old_amount = Decimal(str(transactions['amount']))
             balance_adjustment = new_amount - old_amount
             
             # Update transaction
@@ -1327,11 +1324,11 @@ def edit_transaction(transaction_id):
     
     # GET request - show edit form
     categories = db.execute("SELECT * FROM categories ORDER BY type, name")
-    return render_template("edit_transaction.html", 
-                         transaction=transaction, 
+    return render_template("edit_transactions.html", 
+                         transactions=transactions, 
                          categories=categories)
 
-@app.route("/transaction/<int:transaction_id>/delete", methods=["POST"])
+@app.route("/transactions/<int:transaction_id>/delete", methods=["POST"])
 @login_required
 def delete_transaction(transaction_id):
     """Delete a transaction with proper validation and atomicity"""

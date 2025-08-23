@@ -1,6 +1,332 @@
 {% extends "layout.html" %}
-{% block title %}Budget{% endblock %}
+
+{% block title %}Budget Management - FinTrack{% endblock %}
+
 {% block content %}
-<h2>Budget Page</h2>
-<p>Budget functionality coming soon.</p>
+<div class="container mt-4">
+    <!-- Page Header with Summary Statistics -->
+    <!-- This gives users an immediate overview of their budget health -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>Budget Management</h2>
+            <p class="text-muted">Set spending limits and track your financial goals</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <!-- Summary badges showing overall budget status -->
+            <div class="mb-2">
+                <span class="badge bg-primary fs-6">
+                    Total Budget: ${{ "%.2f"|format(total_budget) }}
+                </span>
+            </div>
+            <div>
+                <span class="badge bg-info fs-6">
+                    Total Spent: ${{ "%.2f"|format(total_spent) }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Budgets Section -->
+    <!-- This is where users see all their budgets and current status -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Active Budgets</h5>
+        </div>
+        <div class="card-body">
+            {% if budgets %}
+                <!-- Budget cards grid - responsive layout for different screen sizes -->
+                <div class="row g-3">
+                    {% for budget in budgets %}
+                    <div class="col-md-6 col-lg-4">
+                        <!-- Individual budget card with visual status indicator -->
+                        <div class="card border-{{ budget.status }} h-100">
+                            <div class="card-header bg-light">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">{{ budget.category_name }}</h6>
+                                    <span class="badge bg-{{ budget.status }}">
+                                        {{ budget.status_text }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- Budget period information -->
+                                <div class="mb-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar"></i> 
+                                        {{ budget.period|capitalize }} Budget
+                                    </small>
+                                    <br>
+                                    <small class="text-muted">
+                                        {{ budget.period_start }} to {{ budget.period_end }}
+                                    </small>
+                                </div>
+
+                                <!-- Progress bar showing spending vs budget -->
+                                <!-- Color changes based on percentage (green/yellow/red) -->
+                                <div class="progress mb-3" style="height: 25px;">
+                                    <div class="progress-bar bg-{{ budget.status }}" 
+                                         role="progressbar" 
+                                         style="width: {{ [budget.percentage, 100]|min }}%"
+                                         aria-valuenow="{{ budget.percentage }}"
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                        {{ "%.1f"|format(budget.percentage) }}%
+                                    </div>
+                                </div>
+
+                                <!-- Spending details -->
+                                <div class="row text-center mb-3">
+                                    <div class="col">
+                                        <small class="text-muted">Spent</small>
+                                        <div class="fw-bold text-danger">
+                                            ${{ "%.2f"|format(budget.current_spending) }}
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <small class="text-muted">Budget</small>
+                                        <div class="fw-bold">
+                                            ${{ "%.2f"|format(budget.amount) }}
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <small class="text-muted">Remaining</small>
+                                        <div class="fw-bold {% if budget.remaining < 0 %}text-danger{% else %}text-success{% endif %}">
+                                            ${{ "%.2f"|format(budget.remaining|abs) }}
+                                            {% if budget.remaining < 0 %}
+                                                <small>over</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Action buttons for editing and deleting -->
+                                <div class="d-flex gap-2">
+                                    <!-- Edit button triggers modal -->
+                                    <button class="btn btn-sm btn-outline-primary flex-fill" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#editBudgetModal{{ budget.id }}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+                                    
+                                    <!-- Delete form with CSRF protection -->
+                                    <form method="post" 
+                                          action="{{ url_for('delete_budget', budget_id=budget.id) }}" 
+                                          class="flex-fill"
+                                          onsubmit="return confirm('Are you sure you want to delete this budget?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Edit Budget Modal for each budget -->
+                    <!-- This allows inline editing without page navigation -->
+                    <div class="modal fade" id="editBudgetModal{{ budget.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Edit Budget - {{ budget.category_name }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form method="post" action="{{ url_for('edit_budget', budget_id=budget.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Budget Amount</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" 
+                                                       name="amount" 
+                                                       class="form-control" 
+                                                       step="0.01" 
+                                                       min="0.01" 
+                                                       max="999999.99"
+                                                       value="{{ budget.amount }}" 
+                                                       required>
+                                            </div>
+                                            <small class="text-muted">
+                                                Current spending: ${{ "%.2f"|format(budget.current_spending) }}
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                            Cancel
+                                        </button>
+                                        <button type="submit" class="btn btn-primary">
+                                            Save Changes
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <!-- Empty state - shown when no budgets exist -->
+                <div class="text-center py-5">
+                    <i class="fas fa-piggy-bank text-muted" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3">No budgets set yet</h5>
+                    <p class="text-muted">Create your first budget to start tracking your spending</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Add New Budget Section -->
+    <!-- This form allows users to create new budget limits -->
+    <div class="card">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Create New Budget</h5>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('add_budget') }}" id="addBudgetForm">
+                <!-- CSRF token for security - prevents cross-site request forgery -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="row g-3">
+                    <!-- Category selection -->
+                    <div class="col-md-3">
+                        <label for="category_id" class="form-label">
+                            Category <span class="text-danger">*</span>
+                        </label>
+                        <select name="category_id" 
+                                id="category_id" 
+                                class="form-select" 
+                                required>
+                            <option value="">Select Category</option>
+                            {% for category in categories %}
+                                <option value="{{ category.id }}">{{ category.name }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if not categories %}
+                            <small class="text-danger">No expense categories available</small>
+                        {% endif %}
+                    </div>
+
+                    <!-- Budget amount input -->
+                    <div class="col-md-3">
+                        <label for="amount" class="form-label">
+                            Budget Amount <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" 
+                                   name="amount" 
+                                   id="amount" 
+                                   class="form-control" 
+                                   step="0.01" 
+                                   min="0.01" 
+                                   max="999999.99"
+                                   placeholder="0.00" 
+                                   required>
+                        </div>
+                    </div>
+
+                    <!-- Period selection -->
+                    <div class="col-md-3">
+                        <label for="period" class="form-label">
+                            Period <span class="text-danger">*</span>
+                        </label>
+                        <select name="period" 
+                                id="period" 
+                                class="form-select" 
+                                required>
+                            <option value="">Select Period</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly" selected>Monthly</option>
+                            <option value="yearly">Yearly</option>
+                        </select>
+                    </div>
+
+                    <!-- Start date -->
+                    <div class="col-md-3">
+                        <label for="start_date" class="form-label">
+                            Start Date <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" 
+                               name="start_date" 
+                               id="start_date" 
+                               class="form-control" 
+                               value="{{ current_date }}" 
+                               required>
+                    </div>
+                </div>
+
+                <!-- Submit button -->
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus-circle"></i> Create Budget
+                    </button>
+                    <button type="reset" class="btn btn-secondary">
+                        <i class="fas fa-undo"></i> Reset
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Budget Tips Section -->
+    <!-- Educational content to help users budget effectively -->
+    <div class="alert alert-info mt-4">
+        <h6><i class="fas fa-lightbulb"></i> Budgeting Tips</h6>
+        <ul class="mb-0">
+            <li>Start with essential categories like rent, utilities, and groceries</li>
+            <li>Use the 50/30/20 rule: 50% needs, 30% wants, 20% savings</li>
+            <li>Review and adjust your budgets monthly based on actual spending</li>
+            <li>Set realistic limits - budgets that are too tight often fail</li>
+        </ul>
+    </div>
+</div>
+
+<!-- Include Bootstrap JavaScript for modals -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Additional JavaScript for enhanced user experience -->
+<script>
+// Validate budget form before submission
+document.getElementById('addBudgetForm').addEventListener('submit', function(e) {
+    // Get form values
+    const category = document.getElementById('category_id').value;
+    const amount = parseFloat(document.getElementById('amount').value);
+    const period = document.getElementById('period').value;
+    
+    // Perform client-side validation
+    // This provides immediate feedback without server round-trip
+    if (!category || !period) {
+        e.preventDefault();
+        alert('Please fill in all required fields');
+        return false;
+    }
+    
+    if (isNaN(amount) || amount <= 0) {
+        e.preventDefault();
+        alert('Please enter a valid budget amount');
+        return false;
+    }
+    
+    // Warn about large budgets (potential typo)
+    if (amount > 10000) {
+        if (!confirm(`Are you sure you want to set a budget of $${amount.toFixed(2)}? This seems quite high.`)) {
+            e.preventDefault();
+            return false;
+        }
+    }
+});
+
+// Auto-update remaining days in period (enhanced UX)
+// This helps users understand when their budget will reset
+document.addEventListener('DOMContentLoaded', function() {
+    // Calculate and display days remaining for each budget period
+    const today = new Date('{{ current_date }}');
+    
+    // You could enhance this to show "3 days left in period" 
+    // for each budget card to create urgency
+});
+</script>
 {% endblock %}

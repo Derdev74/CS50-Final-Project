@@ -52,7 +52,7 @@ class DatabaseInitializer:
             with conn:
                 # Users table
                 conn.execute('''
-CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL UNIQUE,
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS goals (
                 ''')
                 # Security audit log table
                 conn.execute('''
-CREATE TABLE IF NOT EXISTS security_logs (
+    CREATE TABLE IF NOT EXISTS security_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
     event_type TEXT NOT NULL,
@@ -131,11 +131,11 @@ CREATE TABLE IF NOT EXISTS security_logs (
     details TEXT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
-)
+    )
                 ''')
                 # Email verification attempts table
                 conn.execute('''
-CREATE TABLE IF NOT EXISTS email_verification_attempts (
+    CREATE TABLE IF NOT EXISTS email_verification_attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL,
     ip_address TEXT,
@@ -228,7 +228,7 @@ def init_db():
     """Initialize the database with necessary tables"""
     # Users table
     db.execute('''
-CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL UNIQUE,
@@ -247,19 +247,19 @@ CREATE TABLE IF NOT EXISTS users (
     last_login TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-''')
+    )
+    ''')
     # Categories table
     db.execute('''
-CREATE TABLE IF NOT EXISTS categories (
+    CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     type TEXT CHECK(type IN ('income', 'expense')) NOT NULL
-)
-''')
+    )
+    ''')
     # Transactions table
     db.execute('''
-CREATE TABLE IF NOT EXISTS transactions (
+    CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     category_id INTEGER,
@@ -269,11 +269,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-)
-''')
+    )
+    ''')
     # Budgets table
     db.execute('''
-CREATE TABLE IF NOT EXISTS budgets (
+    CREATE TABLE IF NOT EXISTS budgets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     category_id INTEGER,
@@ -282,11 +282,11 @@ CREATE TABLE IF NOT EXISTS budgets (
     start_date DATE NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES categories(id)
-)
-''')
+    )
+    ''')
     # Goals table
     db.execute('''
-CREATE TABLE IF NOT EXISTS goals (
+    CREATE TABLE IF NOT EXISTS goals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
@@ -294,11 +294,11 @@ CREATE TABLE IF NOT EXISTS goals (
     current_amount NUMERIC DEFAULT 0,
     deadline DATE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-)
-''')
+    )
+    ''')
     # Security audit log table
     db.execute('''
-CREATE TABLE IF NOT EXISTS security_logs (
+    CREATE TABLE IF NOT EXISTS security_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
     event_type TEXT NOT NULL,
@@ -307,19 +307,19 @@ CREATE TABLE IF NOT EXISTS security_logs (
     details TEXT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
-)
-''')
+    )
+    ''')
     # Email verification attempts table
     db.execute('''
-CREATE TABLE IF NOT EXISTS email_verification_attempts (
+    CREATE TABLE IF NOT EXISTS email_verification_attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL,
     ip_address TEXT,
     attempts INTEGER DEFAULT 1,
     last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     blocked_until TIMESTAMP
-)
-''')
+    )
+    ''')
     # Indexes for optimization
     db.execute('CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_txn_category ON transactions(category_id)')
@@ -342,16 +342,16 @@ CREATE TABLE IF NOT EXISTS email_verification_attempts (
     
     # Categories table
     db.execute('''
-        CREATE TABLE IF NOT EXISTS categories (
+            CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             type TEXT CHECK(type IN ('income', 'expense')) NOT NULL
-        )
-    ''')
+            )   
+            ''')
     
     # Transactions table
     db.execute('''
-        CREATE TABLE IF NOT EXISTS transactions (
+            CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             category_id INTEGER,
@@ -361,12 +361,12 @@ CREATE TABLE IF NOT EXISTS email_verification_attempts (
             date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-        )
-    ''')
+            )
+            ''')
     
     # Budgets table
     db.execute('''
-        CREATE TABLE IF NOT EXISTS budgets (
+            CREATE TABLE IF NOT EXISTS budgets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             category_id INTEGER,
@@ -375,12 +375,12 @@ CREATE TABLE IF NOT EXISTS email_verification_attempts (
             start_date DATE NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (category_id) REFERENCES categories(id)
-        )
-    ''')
+            )
+            ''')
     
     # Goals table
     db.execute('''
-        CREATE TABLE IF NOT EXISTS goals (
+            CREATE TABLE IF NOT EXISTS goals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             name TEXT NOT NULL,
@@ -388,12 +388,12 @@ CREATE TABLE IF NOT EXISTS email_verification_attempts (
             current_amount NUMERIC DEFAULT 0,
             deadline DATE,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    ''')
+            )
+            ''')
     
     # Security audit log table
     db.execute('''
-        CREATE TABLE IF NOT EXISTS security_logs (
+            CREATE TABLE IF NOT EXISTS security_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             event_type TEXT NOT NULL,
@@ -402,20 +402,20 @@ CREATE TABLE IF NOT EXISTS email_verification_attempts (
             details TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-    ''')
+            )
+            ''')
     
     # Email verification attempts table
     db.execute('''
-        CREATE TABLE IF NOT EXISTS email_verification_attempts (
+            CREATE TABLE IF NOT EXISTS email_verification_attempts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL,
             ip_address TEXT,
             attempts INTEGER DEFAULT 1,
             last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             blocked_until TIMESTAMP
-        )
-    ''')
+            )
+            ''')
     
     # Indexes for optimization
     db.execute('CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC)')
@@ -1121,6 +1121,7 @@ def transactions():
         total_expense=float(total_expense),
         page=page,
         total_pages=total_pages,
+        today_date=datetime.now().strftime('%Y-%m-%d'),
         filters={
             'category': category_filter,
             'date_from': date_from,
@@ -1253,7 +1254,7 @@ def edit_transaction(transaction_id):
         flash('Transaction not found.', 'error')
         return redirect(url_for('transactions'))
     
-    transactions = transactions[0]
+    transaction = transactions[0]
     
     if request.method == "POST":
         # Similar validation as add_transaction
@@ -1317,7 +1318,7 @@ def edit_transaction(transaction_id):
     
     # GET request - show edit form
     categories = db.execute("SELECT * FROM categories ORDER BY type, name")
-    return render_template("edit_transactions.html", 
+    return render_template("edit_transaction.html", 
                          transactions=transactions, 
                          categories=categories)
 
@@ -1366,19 +1367,713 @@ def delete_transaction(transaction_id):
     
     return redirect(url_for('transactions'))
 
-@app.route("/budget", methods=["GET", "POST"])
+@app.route("/budget", methods=["GET"])
 @login_required
 def budget():
+    """
+    Display budget overview with spending analysis.
+    
+    This function serves as the budget dashboard, showing:
+    1. All active budgets for the user
+    2. Current spending against each budget
+    3. Visual progress indicators (progress bars)
+    4. Warnings for budgets that are close to or over the limit
+    
+    The calculation logic determines the current period for each budget
+    and calculates spending only within that period.
+    """
     if not validate_session():
         return redirect(url_for('login'))
-    return render_template("budget.html")
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Get current date for period calculations
+        # We need this to determine which budgets are currently active
+        current_date = datetime.now().date()
+        
+        # Fetch all budgets for the user with category information
+        # We join with categories to get the category name and type
+        budgets = db.execute("""
+            SELECT b.*, c.name as category_name, c.type as category_type
+            FROM budgets b
+            JOIN categories c ON b.category_id = c.id
+            WHERE b.user_id = ?
+            ORDER BY b.period, c.name
+        """, user_id)
+        
+        # Process each budget to calculate current spending
+        # This is where the magic happens - we match spending to budget periods
+        for budget in budgets:
+            # Calculate the current period's date range based on budget type
+            # This is crucial for accurate tracking
+            start_date = datetime.strptime(budget['start_date'], '%Y-%m-%d').date()
+            
+            if budget['period'] == 'weekly':
+                # For weekly budgets, find which week we're in
+                days_passed = (current_date - start_date).days
+                weeks_passed = days_passed // 7
+                period_start = start_date + timedelta(days=weeks_passed * 7)
+                period_end = period_start + timedelta(days=6)
+                
+            elif budget['period'] == 'monthly':
+                # For monthly budgets, we need to handle month boundaries correctly
+                # This accounts for different month lengths (28, 29, 30, 31 days)
+                months_passed = (current_date.year - start_date.year) * 12 + (current_date.month - start_date.month)
+                period_start = datetime(start_date.year, start_date.month, start_date.day).date()
+                
+                # Add months to get current period
+                year = start_date.year + (start_date.month + months_passed - 1) // 12
+                month = (start_date.month + months_passed - 1) % 12 + 1
+                period_start = datetime(year, month, start_date.day).date()
+                
+                # Calculate period end (last day of the month)
+                if month == 12:
+                    period_end = datetime(year + 1, 1, start_date.day).date() - timedelta(days=1)
+                else:
+                    period_end = datetime(year, month + 1, start_date.day).date() - timedelta(days=1)
+                    
+            else:  # yearly
+                # For yearly budgets, calculate based on anniversary of start date
+                years_passed = current_date.year - start_date.year
+                period_start = datetime(start_date.year + years_passed, start_date.month, start_date.day).date()
+                period_end = datetime(start_date.year + years_passed + 1, start_date.month, start_date.day).date() - timedelta(days=1)
+            
+            # Now calculate actual spending in this period for this category
+            # We use absolute value since expenses are stored as negative
+            spending = db.execute("""
+                SELECT COALESCE(SUM(ABS(amount)), 0) as total
+                FROM transactions
+                WHERE user_id = ? 
+                AND category_id = ?
+                AND date >= ?
+                AND date <= ?
+            """, user_id, budget['category_id'], 
+                period_start.isoformat(), period_end.isoformat())
+            
+            # Add calculated fields to budget object for template use
+            # These will be used to display progress and warnings
+            budget['current_spending'] = float(spending[0]['total']) if spending else 0
+            budget['remaining'] = float(budget['amount']) - budget['current_spending']
+            budget['percentage'] = (budget['current_spending'] / float(budget['amount']) * 100) if budget['amount'] > 0 else 0
+            budget['period_start'] = period_start.isoformat()
+            budget['period_end'] = period_end.isoformat()
+            
+            # Determine status for visual indicators (green/yellow/red)
+            if budget['percentage'] >= 100:
+                budget['status'] = 'danger'  # Over budget - red
+                budget['status_text'] = 'Over Budget'
+            elif budget['percentage'] >= 80:
+                budget['status'] = 'warning'  # Close to limit - yellow
+                budget['status_text'] = 'Near Limit'
+            else:
+                budget['status'] = 'success'  # Within budget - green
+                budget['status_text'] = 'On Track'
+        
+        # Get categories for the add budget form dropdown
+        # We need this to let users create new budgets
+        categories = db.execute("SELECT * FROM categories WHERE type = 'expense' ORDER BY name")
+        
+        # Calculate summary statistics for the dashboard
+        total_budget = sum(b['amount'] for b in budgets)
+        total_spent = sum(b['current_spending'] for b in budgets)
+        
+        return render_template("budget.html",
+                             budgets=budgets,
+                             categories=categories,
+                             total_budget=total_budget,
+                             total_spent=total_spent,
+                             current_date=current_date.isoformat())
+        
+    except Exception as e:
+        logger.error(f"Error loading budgets for user {user_id}: {str(e)}")
+        flash('Failed to load budgets. Please try again.', 'error')
+        return render_template("budget.html", budgets=[], categories=[])
 
-@app.route("/profile", methods=["GET", "POST"])
+@app.route("/budget/add", methods=["POST"])
+@login_required
+def add_budget():
+    """
+    Add a new budget with validation.
+    
+    Security considerations:
+    - Validates all inputs to prevent invalid data
+    - Checks for duplicate budgets in the same period
+    - Uses Decimal for precise financial calculations
+    - Logs all budget creation for audit trail
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Validate and sanitize input with comprehensive checks
+    # This prevents both accidental errors and malicious input
+    category_id = request.form.get('category_id', type=int)
+    if not category_id or category_id <= 0:
+        flash('Please select a valid category.', 'error')
+        return redirect(url_for('budget'))
+    
+    # Use Decimal for precise financial calculations
+    # This prevents floating-point errors in financial calculations
+    amount_str = request.form.get('amount', '').strip()
+    if not amount_str:
+        flash('Budget amount is required.', 'error')
+        return redirect(url_for('budget'))
+    
+    try:
+        amount = Decimal(amount_str)
+        
+        # Validate reasonable budget amounts
+        # Prevents both typos and potential overflow attacks
+        if amount <= 0:
+            flash('Budget amount must be positive.', 'error')
+            return redirect(url_for('budget'))
+        
+        if amount > Decimal('999999.99'):
+            flash('Budget amount is too large.', 'error')
+            return redirect(url_for('budget'))
+            
+    except (InvalidOperation, ValueError):
+        flash('Invalid budget amount format.', 'error')
+        return redirect(url_for('budget'))
+    
+    # Validate period selection
+    period = request.form.get('period', '').strip()
+    if period not in ['weekly', 'monthly', 'yearly']:
+        flash('Invalid budget period selected.', 'error')
+        return redirect(url_for('budget'))
+    
+    # Validate start date
+    start_date_str = request.form.get('start_date', '').strip()
+    if not start_date_str:
+        # Default to today if not provided
+        start_date_str = datetime.now().strftime('%Y-%m-%d')
+    else:
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            
+            # Don't allow start dates too far in the past
+            # This prevents confusion with historical data
+            if start_date < datetime.now() - timedelta(days=365):
+                flash('Start date cannot be more than 1 year in the past.', 'error')
+                return redirect(url_for('budget'))
+                
+            # Don't allow start dates too far in the future
+            if start_date > datetime.now() + timedelta(days=30):
+                flash('Start date cannot be more than 30 days in the future.', 'error')
+                return redirect(url_for('budget'))
+                
+        except ValueError:
+            flash('Invalid date format.', 'error')
+            return redirect(url_for('budget'))
+    
+    try:
+        # Check for existing budget with same category and period
+        # This prevents duplicate budgets that would confuse tracking
+        existing = db.execute("""
+            SELECT id FROM budgets 
+            WHERE user_id = ? AND category_id = ? AND period = ?
+        """, user_id, category_id, period)
+        
+        if existing:
+            flash('A budget already exists for this category and period. Please edit the existing budget instead.', 'warning')
+            return redirect(url_for('budget'))
+        
+        # Insert new budget
+        budget_id = db.execute("""
+            INSERT INTO budgets (user_id, category_id, amount, period, start_date)
+            VALUES (?, ?, ?, ?, ?)
+        """, user_id, category_id, float(amount), period, start_date_str)
+        
+        # Log the budget creation for audit trail
+        log_security_event(user_id, 'BUDGET_CREATED', 
+                         f'Budget ID: {budget_id}, Category: {category_id}, Amount: {amount}, Period: {period}')
+        
+        flash('Budget created successfully!', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error creating budget for user {user_id}: {str(e)}")
+        flash('Failed to create budget. Please try again.', 'error')
+    
+    return redirect(url_for('budget'))
+
+@app.route("/budget/<int:budget_id>/edit", methods=["POST"])
+@login_required
+def edit_budget(budget_id):
+    """
+    Edit an existing budget.
+    
+    Security: Verifies budget ownership before allowing modifications.
+    This prevents users from modifying other users' budgets.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Verify budget belongs to user - critical security check
+    budget = db.execute("""
+        SELECT * FROM budgets 
+        WHERE id = ? AND user_id = ?
+    """, budget_id, user_id)
+    
+    if not budget:
+        flash('Budget not found or access denied.', 'error')
+        return redirect(url_for('budget'))
+    
+    # Validate new amount
+    amount_str = request.form.get('amount', '').strip()
+    if not amount_str:
+        flash('Budget amount is required.', 'error')
+        return redirect(url_for('budget'))
+    
+    try:
+        amount = Decimal(amount_str)
+        
+        if amount <= 0 or amount > Decimal('999999.99'):
+            flash('Invalid budget amount.', 'error')
+            return redirect(url_for('budget'))
+            
+        # Update budget
+        db.execute("""
+            UPDATE budgets 
+            SET amount = ?
+            WHERE id = ? AND user_id = ?
+        """, float(amount), budget_id, user_id)
+        
+        log_security_event(user_id, 'BUDGET_EDITED', f'Budget ID: {budget_id}, New Amount: {amount}')
+        flash('Budget updated successfully!', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error updating budget {budget_id}: {str(e)}")
+        flash('Failed to update budget.', 'error')
+    
+    return redirect(url_for('budget'))
+
+@app.route("/budget/<int:budget_id>/delete", methods=["POST"])
+@login_required
+def delete_budget(budget_id):
+    """
+    Delete a budget.
+    
+    Security: Verifies ownership before deletion.
+    Note: This doesn't affect past transactions, only removes the budget limit.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Verify ownership and delete in one query for atomicity
+        result = db.execute("""
+            DELETE FROM budgets 
+            WHERE id = ? AND user_id = ?
+        """, budget_id, user_id)
+        
+        log_security_event(user_id, 'BUDGET_DELETED', f'Budget ID: {budget_id}')
+        flash('Budget deleted successfully!', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error deleting budget {budget_id}: {str(e)}")
+        flash('Failed to delete budget.', 'error')
+    
+    return redirect(url_for('budget'))
+
+@app.route("/profile", methods=["GET"])
 @login_required
 def profile():
+    """
+    Display user profile with account information and settings.
+    
+    This function serves as the user's personal dashboard where they can:
+    1. View their account information
+    2. See security status (email verification, last login)
+    3. Access various settings and preferences
+    4. Review account statistics
+    
+    The profile page is designed to give users complete control over their
+    account while maintaining security through session validation.
+    """
     if not validate_session():
         return redirect(url_for('login'))
-    return render_template("profile.html")
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Fetch complete user information from the database
+        # We need all user fields to display current settings
+        user = db.execute("""
+            SELECT id, username, email, email_verified, cash, theme, 
+                   last_login, created_at, updated_at
+            FROM users 
+            WHERE id = ?
+        """, user_id)
+        
+        if not user:
+            # This shouldn't happen with proper session management, but we check anyway
+            session.clear()
+            flash('User account not found. Please log in again.', 'error')
+            return redirect(url_for('login'))
+        
+        user = user[0]
+        
+        # Calculate account statistics for the user
+        # These give users insight into their financial activity
+        
+        # Total number of transactions
+        transaction_count = db.execute("""
+            SELECT COUNT(*) as count 
+            FROM transactions 
+            WHERE user_id = ?
+        """, user_id)[0]['count']
+        
+        # Account age in days - helps users see their journey
+        created_date = datetime.fromisoformat(user['created_at'])
+        account_age_days = (datetime.now() - created_date).days
+        
+        # Number of active budgets
+        budget_count = db.execute("""
+            SELECT COUNT(*) as count 
+            FROM budgets 
+            WHERE user_id = ?
+        """, user_id)[0]['count']
+        
+        # Calculate total income and expenses for overview
+        # This helps users understand their overall financial flow
+        totals = db.execute("""
+            SELECT 
+                COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as total_income,
+                COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) as total_expenses
+            FROM transactions 
+            WHERE user_id = ?
+        """, user_id)[0]
+        
+        # Get recent security events for the security log section
+        # Users should be aware of account access patterns
+        security_events = db.execute("""
+            SELECT event_type, ip_address, timestamp 
+            FROM security_logs 
+            WHERE user_id = ? 
+                AND event_type IN ('LOGIN', 'PASSWORD_CHANGED', 'EMAIL_CHANGED')
+            ORDER BY timestamp DESC 
+            LIMIT 5
+        """, user_id)
+        
+        # Format last login time for display
+        # We show this prominently so users can spot unauthorized access
+        if user['last_login']:
+            last_login = datetime.fromisoformat(user['last_login'])
+            user['last_login_formatted'] = last_login.strftime('%B %d, %Y at %I:%M %p')
+        else:
+            user['last_login_formatted'] = 'Never'
+        
+        return render_template("profile.html",
+                             user=user,
+                             transaction_count=transaction_count,
+                             account_age_days=account_age_days,
+                             budget_count=budget_count,
+                             total_income=totals['total_income'],
+                             total_expenses=totals['total_expenses'],
+                             security_events=security_events)
+        
+    except Exception as e:
+        logger.error(f"Error loading profile for user {user_id}: {str(e)}")
+        flash('Failed to load profile. Please try again.', 'error')
+        return redirect(url_for('dashboard'))
+
+@app.route("/profile/update", methods=["POST"])
+@login_required
+def update_profile():
+    """
+    Update user profile information.
+    
+    This handles updates to basic profile information like username and email.
+    Email changes trigger a new verification process for security.
+    Username changes are validated for uniqueness and format.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Determine what type of update this is
+    # We handle different updates differently for security reasons
+    update_type = request.form.get('update_type', '')
+    
+    if update_type == 'basic_info':
+        # Handle username and email updates
+        # These require careful validation as they're used for login
+        
+        new_username = request.form.get('username', '').strip()
+        new_email = request.form.get('email', '').strip().lower()
+        
+        # Validate username if provided
+        if new_username:
+            # Check username format using regex
+            # Same pattern as registration for consistency
+            if not re.match(r'^[a-zA-Z0-9_.-]+$', new_username):
+                flash('Username can only contain letters, numbers, dots, hyphens, and underscores.', 'error')
+                return redirect(url_for('profile'))
+            
+            if len(new_username) < 3 or len(new_username) > 50:
+                flash('Username must be between 3 and 50 characters.', 'error')
+                return redirect(url_for('profile'))
+            
+            # Check if username is already taken by another user
+            existing = db.execute("""
+                SELECT id FROM users 
+                WHERE username = ? AND id != ?
+            """, new_username, user_id)
+            
+            if existing:
+                flash('Username is already taken.', 'error')
+                return redirect(url_for('profile'))
+        
+        # Validate email if provided
+        if new_email:
+            # Basic email format validation
+            if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', new_email):
+                flash('Please enter a valid email address.', 'error')
+                return redirect(url_for('profile'))
+            
+            # Check if email is already used by another account
+            existing = db.execute("""
+                SELECT id FROM users 
+                WHERE email = ? AND id != ?
+            """, new_email, user_id)
+            
+            if existing:
+                flash('Email is already registered to another account.', 'error')
+                return redirect(url_for('profile'))
+        
+        try:
+            # Get current user data to check what's changing
+            current_user = db.execute("SELECT username, email FROM users WHERE id = ?", user_id)[0]
+            
+            # Track what's being updated for logging
+            updates = []
+            
+            # Update username if changed
+            if new_username and new_username != current_user['username']:
+                db.execute("UPDATE users SET username = ?, updated_at = ? WHERE id = ?",
+                          new_username, datetime.now().isoformat(), user_id)
+                session['username'] = new_username  # Update session
+                updates.append(f"Username: {current_user['username']} -> {new_username}")
+            
+            # Update email if changed (requires re-verification)
+            if new_email and new_email != current_user['email']:
+                # Generate new verification token
+                verification_token = generate_token()
+                verification_expires = datetime.now() + timedelta(hours=24)
+                
+                db.execute("""
+                    UPDATE users 
+                    SET email = ?, email_verified = FALSE, 
+                        email_verification_token = ?, 
+                        email_verification_expires = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """, new_email, verification_token, 
+                    verification_expires.isoformat(), 
+                    datetime.now().isoformat(), user_id)
+                
+                # Send verification email
+                verification_url = url_for('verify_email', token=verification_token, _external=True)
+                send_email(new_email, 'Verify Your New Email Address', 'email_verification',
+                          username=new_username or current_user['username'],
+                          verification_url=verification_url,
+                          expiry_hours=24)
+                
+                updates.append(f"Email: {current_user['email']} -> {new_email}")
+                flash('Email updated. Please check your inbox to verify your new email address.', 'info')
+            
+            if updates:
+                log_security_event(user_id, 'PROFILE_UPDATED', ', '.join(updates))
+                flash('Profile updated successfully!', 'success')
+            else:
+                flash('No changes were made.', 'info')
+                
+        except Exception as e:
+            logger.error(f"Error updating profile for user {user_id}: {str(e)}")
+            flash('Failed to update profile. Please try again.', 'error')
+    
+    return redirect(url_for('profile'))
+
+@app.route("/profile/change-password", methods=["POST"])
+@login_required
+def change_password():
+    """
+    Change user password with verification of current password.
+    
+    Security measures:
+    1. Requires current password verification
+    2. Validates new password strength
+    3. Prevents reuse of current password
+    4. Logs security event
+    5. Optional: Send email notification of password change
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Get form data
+    current_password = request.form.get('current_password', '')
+    new_password = request.form.get('new_password', '')
+    confirm_password = request.form.get('confirm_password', '')
+    
+    # Validate all fields are provided
+    if not all([current_password, new_password, confirm_password]):
+        flash('All password fields are required.', 'error')
+        return redirect(url_for('profile'))
+    
+    # Check if new passwords match
+    if new_password != confirm_password:
+        flash('New passwords do not match.', 'error')
+        return redirect(url_for('profile'))
+    
+    try:
+        # Get current user's password hash
+        user = db.execute("SELECT password_hash, email, username FROM users WHERE id = ?", user_id)[0]
+        
+        # Verify current password is correct
+        # This prevents unauthorized password changes if session is hijacked
+        if not check_password_hash(user['password_hash'], current_password):
+            log_security_event(user_id, 'PASSWORD_CHANGE_FAILED', 'Incorrect current password')
+            flash('Current password is incorrect.', 'error')
+            return redirect(url_for('profile'))
+        
+        # Check if new password is same as current (no change)
+        if check_password_hash(user['password_hash'], new_password):
+            flash('New password must be different from current password.', 'error')
+            return redirect(url_for('profile'))
+        
+        # Validate new password strength using auth service
+        password_errors = auth_service.validate_password(new_password)
+        if password_errors:
+            for error in password_errors:
+                flash(error, 'error')
+            return redirect(url_for('profile'))
+        
+        # Update password in database
+        new_password_hash = generate_password_hash(new_password)
+        db.execute("""
+            UPDATE users 
+            SET password_hash = ?, updated_at = ?
+            WHERE id = ?
+        """, new_password_hash, datetime.now().isoformat(), user_id)
+        
+        # Log security event
+        log_security_event(user_id, 'PASSWORD_CHANGED', 'Password successfully changed')
+        
+        # Optional: Send email notification about password change
+        # This alerts users if their password was changed without their knowledge
+        try:
+            send_email(user['email'], 
+                      'Password Changed - FinTrack',
+                      'password_changed_notification',
+                      username=user['username'])
+        except:
+            pass  # Don't fail the password change if email fails
+        
+        flash('Password changed successfully!', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error changing password for user {user_id}: {str(e)}")
+        flash('Failed to change password. Please try again.', 'error')
+    
+    return redirect(url_for('profile'))
+
+@app.route("/profile/preferences", methods=["POST"])
+@login_required
+def update_preferences():
+    """
+    Update user preferences like theme and currency settings.
+    
+    These are non-critical settings that affect user experience
+    but not security, so validation is less strict.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Get theme preference
+    theme = request.form.get('theme', 'light')
+    if theme not in ['light', 'dark']:
+        theme = 'light'  # Default to light if invalid
+    
+    # Update preferences in database
+    try:
+        db.execute("""
+            UPDATE users 
+            SET theme = ?, updated_at = ?
+            WHERE id = ?
+        """, theme, datetime.now().isoformat(), user_id)
+        
+        # Update session for immediate effect
+        session['theme'] = theme
+        
+        flash('Preferences updated successfully!', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error updating preferences for user {user_id}: {str(e)}")
+        flash('Failed to update preferences.', 'error')
+    
+    return redirect(url_for('profile'))
+
+@app.route("/profile/delete-account", methods=["POST"])
+@login_required
+def delete_account():
+    """
+    Delete user account permanently.
+    
+    This is a destructive action that:
+    1. Requires password confirmation
+    2. Deletes all user data (transactions, budgets, goals)
+    3. Cannot be undone
+    
+    The CASCADE foreign keys handle related data deletion automatically.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Require password confirmation for account deletion
+    password = request.form.get('password', '')
+    
+    if not password:
+        flash('Password is required to delete account.', 'error')
+        return redirect(url_for('profile'))
+    
+    try:
+        # Verify password
+        user = db.execute("SELECT password_hash, username FROM users WHERE id = ?", user_id)[0]
+        
+        if not check_password_hash(user['password_hash'], password):
+            log_security_event(user_id, 'ACCOUNT_DELETION_FAILED', 'Incorrect password')
+            flash('Incorrect password. Account deletion cancelled.', 'error')
+            return redirect(url_for('profile'))
+        
+        # Log the deletion before it happens
+        log_security_event(user_id, 'ACCOUNT_DELETED', f'User {user["username"]} deleted their account')
+        
+        # Delete the user account (CASCADE will handle related records)
+        db.execute("DELETE FROM users WHERE id = ?", user_id)
+        
+        # Clear session
+        session.clear()
+        
+        flash('Your account has been permanently deleted. We\'re sorry to see you go.', 'info')
+        return redirect(url_for('login'))
+        
+    except Exception as e:
+        logger.error(f"Error deleting account for user {user_id}: {str(e)}")
+        flash('Failed to delete account. Please contact support.', 'error')
+        return redirect(url_for('profile'))
 
 # Error handlers
 @app.errorhandler(404)

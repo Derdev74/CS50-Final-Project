@@ -1,4 +1,3 @@
-
 from flask_wtf import FlaskForm
 from dotenv import load_dotenv
 from wtforms import StringField, PasswordField, BooleanField, SubmitField
@@ -206,7 +205,9 @@ if not db_path.exists():
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
-app.config['REGISTRATION_ENABLED'] = True  # Allow registration by default
+app.config['REGISTRATION_ENABLED'] = True
+app.config['PASSWORD_RESET_ENABLED'] = True
+app.config['PASSWORD_RESET_TIMEOUT'] = 15
 # --- Load mail config from environment ---
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
@@ -1044,96 +1045,88 @@ def dashboard():
 @app.route("/transactions", methods=["GET"])
 @login_required
 def transactions():
-    """Display all transactions for the user with secure filtering"""
+    """Display all transactions for the user with secure filtering and correct pagination"""
     if not validate_session():
         return redirect(url_for('login'))
-    
+
     user_id = session.get('user_id')
-    
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    offset = (page - 1) * per_page
+
     # Validate and sanitize filter parameters
     try:
-        # Category filter with validation
         category_filter = request.args.get('category', type=int)
         if category_filter and category_filter <= 0:
             category_filter = None
-            
-        # Date validation
+
         date_from = request.args.get('from', '').strip()
         date_to = request.args.get('to', '').strip()
-        
-        # Validate date format if provided
         if date_from:
             datetime.strptime(date_from, '%Y-%m-%d')
         if date_to:
             datetime.strptime(date_to, '%Y-%m-%d')
-            
-        # Search with length limit and sanitization
+
         search = request.args.get('search', '').strip()[:100]
-        
-        # Escape special LIKE characters
         if search:
-            search = search.replace('\\', '\\\\')
-            search = search.replace('%', '\\%')
-            search = search.replace('_', '\\_')
-            
+            search = search.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
     except ValueError as e:
         flash('Invalid filter parameters.', 'warning')
         return redirect(url_for('transactions'))
-    
-    # Build query with parameterized values
-    query = """
-        SELECT t.*, c.name as category_name, c.type as category_type 
-        FROM transactions t 
-        LEFT JOIN categories c ON t.category_id = c.id 
-        WHERE t.user_id = ?
-    """
+
+    # Build WHERE clause
+    where = ["t.user_id = ?"]
     params = [user_id]
-    
     if category_filter:
-        query += " AND t.category_id = ?"
+        where.append("t.category_id = ?")
         params.append(category_filter)
-    
     if date_from:
-        query += " AND DATE(t.date) >= ?"
+        where.append("DATE(t.date) >= ?")
         params.append(date_from)
-    
     if date_to:
-        query += " AND DATE(t.date) <= ?"
+        where.append("DATE(t.date) <= ?")
         params.append(date_to)
-    
     if search:
-        query += " AND t.description LIKE ? ESCAPE '\\'"
+        where.append("t.description LIKE ? ESCAPE '\\'")
         params.append(f'%{search}%')
-    
-    query += " ORDER BY t.date DESC, t.id DESC LIMIT 1000"  # Limit results
-    
-    try:
-        transactions = db.execute(query, *params)
-    except Exception as e:
-        logger.error(f"Error fetching transactions: {str(e)}")
-        flash('Failed to load transactions.', 'error')
-        transactions = []
-    
-    # Get categories for filter dropdown
+
+    where_clause = " AND ".join(where)
+
+    # Get total count for pagination
+    count_query = f"SELECT COUNT(*) as count FROM transactions t WHERE {where_clause}"
+    total_count = db.execute(count_query, *params)[0]['count']
+    total_pages = max((total_count + per_page - 1) // per_page, 1)
+
+    # Get paginated transactions
+    query = f"""
+        SELECT t.*, c.name as category_name, c.type as category_type
+        FROM transactions t
+        LEFT JOIN categories c ON t.category_id = c.id
+        WHERE {where_clause}
+        ORDER BY t.date DESC, t.id DESC
+        LIMIT ? OFFSET ?
+    """
+    paginated_params = params + [per_page, offset]
+    transactions = db.execute(query, *paginated_params)
+
     categories = db.execute("SELECT * FROM categories ORDER BY type, name")
-    
-    # Calculate totals safely
-    total_income = sum(Decimal(str(t['amount'])) for t in transactions 
-                      if t.get('category_type') == 'income')
-    total_expense = sum(abs(Decimal(str(t['amount']))) for t in transactions 
-                       if t.get('category_type') == 'expense')
-    
-    return render_template("transactions.html", 
-                         transactions=transactions,
-                         categories=categories,
-                         total_income=float(total_income),
-                         total_expense=float(total_expense),
-                         filters={
-                             'category': category_filter,
-                             'date_from': date_from,
-                             'date_to': date_to,
-                             'search': search.replace('\\\\', '\\').replace('\\%', '%').replace('\\_', '_')
-                         })
+
+    total_income = sum(Decimal(str(t['amount'])) for t in transactions if t.get('category_type') == 'income')
+    total_expense = sum(abs(Decimal(str(t['amount']))) for t in transactions if t.get('category_type') == 'expense')
+
+    return render_template("transactions.html",
+        transactions=transactions,
+        categories=categories,
+        total_income=float(total_income),
+        total_expense=float(total_expense),
+        page=page,
+        total_pages=total_pages,
+        filters={
+            'category': category_filter,
+            'date_from': date_from,
+            'date_to': date_to,
+            'search': search.replace('\\\\', '\\').replace('\\%', '%').replace('\\_', '_')
+        })
 
 @app.route("/transactions/add", methods=["POST"])
 @login_required

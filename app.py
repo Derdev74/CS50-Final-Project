@@ -1011,6 +1011,65 @@ def logout():
 @app.route("/dashboard")
 @login_required
 def dashboard():
+    if not validate_session():
+        flash('Your session has expired. Please log in again.', 'info')
+        return redirect(url_for('login'))
+    
+    try:
+        user_id = session.get('user_id')
+        user = db.execute("SELECT * FROM users WHERE id = ?", user_id)
+        if not user:
+            session.clear()
+            flash('User account not found. Please log in again.', 'error')
+            return redirect(url_for('login'))
+        balance = user[0]["cash"]
+        transactions = db.execute(
+            "SELECT t.*, c.name as category_name FROM transactions t "
+            "LEFT JOIN categories c ON t.category_id = c.id "
+            "WHERE t.user_id = ? ORDER BY t.date DESC LIMIT 5", 
+            user_id
+        )
+        # Pie chart: spending by category (expenses only)
+        category_data = db.execute("""
+            SELECT c.name, ABS(SUM(t.amount)) as total
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = ? AND t.amount < 0
+            GROUP BY c.name
+            ORDER BY total DESC
+        """, user_id)
+        # Line chart: income/expense trend by month (last 6 months)
+        trend_data = db.execute("""
+            SELECT strftime('%Y-%m', date) as month,
+                   SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
+                   ABS(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END)) as expense
+            FROM transactions
+            WHERE user_id = ?
+            GROUP BY month
+            ORDER BY month DESC
+            LIMIT 6
+        """, user_id)
+        trend_data = list(reversed(trend_data))  # Show oldest first
+
+        # Goal progress for chart (optional)
+        goals = db.execute(
+            "SELECT name, target_amount, current_amount FROM goals WHERE user_id = ?", user_id
+        )
+
+        return render_template(
+            "dashboard.html",
+            balance=balance,
+            transactions=transactions,
+            user=user[0],
+            category_data=category_data,
+            trend_data=trend_data,
+            goals=goals
+        )
+    except Exception as e:
+        logger.error(f"Dashboard error for user {session.get('user_id')}: {str(e)}")
+        flash('An error occurred loading the dashboard.', 'error')
+        return redirect(url_for('login'))
+
     """Dashboard with session validation"""
     if not validate_session():
         flash('Your session has expired. Please log in again.', 'info')
@@ -1040,7 +1099,11 @@ def dashboard():
         flash('An error occurred loading the dashboard.', 'error')
         return redirect(url_for('login'))
 
-# Other routes remain the same but should include session validation
+@app.route("/")
+@login_required
+def index():
+    return redirect(url_for("dashboard"))
+
 
 @app.route("/transactions", methods=["GET"])
 @login_required
@@ -1681,6 +1744,84 @@ def delete_budget(budget_id):
     
     return redirect(url_for('budget'))
 
+class GoalForm(FlaskForm):
+    name = StringField('Goal Name', validators=[DataRequired(), Length(max=100)])
+    target_amount = DecimalField('Target Amount', validators=[DataRequired(), NumberRange(min=0.01)])
+    deadline = DateField('Deadline', validators=[Optional()])
+    submit = SubmitField('Add Goal')
+
+@app.route("/goals", methods=["GET", "POST"])
+@login_required
+def goals():
+    """Display, add, and manage financial goals with security and validation."""
+    if not validate_session():
+        return redirect(url_for('login'))
+
+    user_id = session.get('user_id')
+    form = GoalForm()
+
+    if form.validate_on_submit():
+        name = form.name.data.strip()
+        target_amount = float(form.target_amount.data)
+        deadline = form.deadline.data.isoformat() if form.deadline.data else None
+
+        db.execute(
+            "INSERT INTO goals (user_id, name, target_amount, deadline) VALUES (?, ?, ?, ?)",
+            user_id, name, target_amount, deadline
+        )
+        flash("Goal added!", "success")
+        log_security_event(user_id, 'GOAL_ADDED', f'Goal: {name}, Target: {target_amount}')
+        return redirect(url_for("goals"))
+
+    # Fetch user's goals
+    goals = db.execute(
+        "SELECT * FROM goals WHERE user_id = ? ORDER BY deadline IS NULL, deadline", user_id
+    )
+    return render_template("goals.html", form=form, goals=goals)
+
+@app.route("/goals/<int:goal_id>/update", methods=["POST"])
+@login_required
+def update_goal(goal_id):
+    """Update current progress towards a goal."""
+    if not validate_session():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    try:
+        amount_str = request.form.get('current_amount', '').strip()
+        if not amount_str:
+            flash('Current amount is required.', 'error')
+            return redirect(url_for('goals'))
+        current_amount = Decimal(amount_str)
+        if current_amount < 0:
+            flash('Current amount cannot be negative.', 'error')
+            return redirect(url_for('goals'))
+        # Update only if the goal belongs to the user
+        db.execute(
+            "UPDATE goals SET current_amount = ? WHERE id = ? AND user_id = ?",
+            float(current_amount), goal_id, user_id
+        )
+        flash('Goal progress updated!', 'success')
+        log_security_event(user_id, 'GOAL_PROGRESS_UPDATED', f'Goal ID: {goal_id}, Progress: {current_amount}')
+    except Exception as e:
+        logger.error(f"Error updating goal progress: {str(e)}")
+        flash('Failed to update goal progress.', 'error')
+    return redirect(url_for('goals'))
+
+@app.route("/goals/<int:goal_id>/delete", methods=["POST"])
+@login_required
+def delete_goal(goal_id):
+    """Delete a goal securely."""
+    if not validate_session():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+    try:
+        db.execute("DELETE FROM goals WHERE id = ? AND user_id = ?", goal_id, user_id)
+        flash("Goal deleted.", "success")
+        log_security_event(user_id, 'GOAL_DELETED', f'Goal ID: {goal_id}')
+    except Exception as e:
+        logger.error(f"Error deleting goal: {str(e)}")
+        flash("Failed to delete goal.", "error")
+    return redirect(url_for("goals"))
 @app.route("/profile", methods=["GET"])
 @login_required
 def profile():

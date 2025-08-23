@@ -7,6 +7,21 @@
 {% block content %}
 <h1 class="mb-4">Welcome to FinTrack</h1>
 
+<div class="container mt-4">
+    <h2>Dashboard</h2>
+    <div class="row">
+        <div class="col-md-6">
+            <canvas id="categoryPie"></canvas>
+        </div>
+        <div class="col-md-6">
+            <canvas id="trendLine"></canvas>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <canvas id="goalsBar"></canvas>
+        </div>
+    </div>
 <!-- Balance Card -->
 <div class="row mb-4">
     <div class="col-md-4">
@@ -52,25 +67,74 @@
 
 {# Scripts block for page-specific JS #}
 {% block scripts %}
-<!-- Load Chart.js from CDN -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
 // Chart.js: Render a placeholder doughnut chart
 // In production, replace with real data from Flask/Jinja
-const ctx = document.getElementById('spendingChart').getContext('2d');
-const spendingChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-        labels: ['Sample'], // Replace with categories
-        datasets: [{
-            data: [100], // Replace with actual spending data
-            backgroundColor: ['#198754'] // Bootstrap green
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } }
-    }
-});
+{% block content %}
+
+<!-- ...existing dashboard content... -->
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Pie Chart: Spending by Category
+    const categoryPie = document.getElementById('categoryPie').getContext('2d');
+    new Chart(categoryPie, {
+        type: 'pie',
+        data: {
+            labels: {{ category_data|map(attribute='name')|list|tojson }},
+            datasets: [{
+                data: {{ category_data|map(attribute='total')|list|tojson }},
+                backgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
+                ]
+            }]
+        },
+        options: {
+            plugins: { title: { display: true, text: 'Spending by Category' } }
+        }
+    });
+
+    // Line Chart: Income/Expense Trend
+    const trendLine = document.getElementById('trendLine').getContext('2d');
+    new Chart(trendLine, {
+        type: 'line',
+        data: {
+            labels: {{ trend_data|map(attribute='month')|list|tojson }},
+            datasets: [
+                {
+                    label: 'Income',
+                    data: {{ trend_data|map(attribute='income')|list|tojson }},
+                    borderColor: '#36A2EB',
+                    fill: false
+                },
+                {
+                    label: 'Expense',
+                    data: {{ trend_data|map(attribute='expense')|list|tojson }},
+                    borderColor: '#FF6384',
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            plugins: { title: { display: true, text: 'Income/Expense Trend (Last 6 Months)' } }
+        }
+    });
+
+    // Bar Chart: Goal Progress
+    const goalsBar = document.getElementById('goalsBar').getContext('2d');
+    new Chart(goalsBar, {
+        type: 'bar',
+        data: {
+            labels: {{ goals|map(attribute='name')|list|tojson }},
+            datasets: [{
+                label: 'Progress (%)',
+                data: {{ goals|map(g => (g.current_amount / g.target_amount * 100 if g.target_amount else 0))|list|tojson }},
+                backgroundColor: '#4BC0C0'
+            }]
+        },
+        options: {
+            plugins: { title: { display: true, text: 'Goal Progress' } },
+            scales: { y: { beginAtZero: true, max: 100 } }
+        }
+    });
 </script>
 {% endblock %}

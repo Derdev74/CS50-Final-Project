@@ -1,82 +1,493 @@
 {% extends "layout.html" %}
-{% block title %}Goals{% endblock %}
+
+{% block title %}Savings Goals - FinTrack{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
-    <h2>Financial Goals</h2>
-    <!-- Add Goal Form -->
-    <form method="post" class="row g-3 mb-4">
-        {{ form.hidden_tag() }}
-        <div class="col-md-4">
-            {{ form.name.label(class="form-label") }}
-            {{ form.name(class="form-control") }}
+    <!-- Page Header with Summary Statistics -->
+    <!-- This overview helps users see their overall progress at a glance -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>Savings Goals</h2>
+            <p class="text-muted">Track your progress toward financial milestones</p>
         </div>
-        <div class="col-md-3">
-            {{ form.target_amount.label(class="form-label") }}
-            {{ form.target_amount(class="form-control") }}
+        <div class="col-md-4 text-end">
+            <!-- Summary statistics for motivation -->
+            <div class="mb-2">
+                <span class="badge bg-primary fs-6">
+                    {{ completed_count }} of {{ total_goals }} completed
+                </span>
+            </div>
+            <div>
+                <span class="badge bg-info fs-6">
+                    ${{ "%.2f"|format(total_saved) }} saved of ${{ "%.2f"|format(total_target) }}
+                </span>
+            </div>
         </div>
-        <div class="col-md-3">
-            {{ form.deadline.label(class="form-label") }}
-            {{ form.deadline(class="form-control") }}
+    </div>
+
+    <!-- Available Funds Indicator -->
+    <!-- Shows users how much they have available to allocate to goals -->
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-wallet"></i>
+        <strong>Available Funds:</strong> ${{ "%.2f"|format(available_funds) }}
+        <small class="text-muted ms-2">
+            (Current balance you could allocate to goals)
+        </small>
+    </div>
+
+    <!-- Active Goals Section -->
+    <!-- These are the goals users are actively working toward -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-bullseye"></i> Active Goals
+            </h5>
         </div>
-        <div class="col-md-2 d-flex align-items-end">
-            {{ form.submit(class="btn btn-success w-100") }}
-        </div>
-    </form>
-    <!-- Goals Table -->
-    <table class="table table-striped align-middle">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Target</th>
-                <th>Current</th>
-                <th>Deadline</th>
-                <th>Progress</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for goal in goals %}
-            <tr>
-                <td>{{ goal.name }}</td>
-                <td>${{ goal.target_amount|round(2) }}</td>
-                <td>
-                    <form method="post" action="{{ url_for('update_goal', goal_id=goal.id) }}" class="d-flex">
-                        <input type="number" step="0.01" min="0" name="current_amount" value="{{ goal.current_amount|round(2) }}" class="form-control form-control-sm" style="width: 90px;" required>
-                        <button type="submit" class="btn btn-sm btn-outline-primary ms-2">Update</button>
-                        {{ csrf_token() }}
-                    </form>
-                </td>
-                <td>{{ goal.deadline or "No deadline" }}</td>
-                <td style="min-width: 120px;">
-                    {% set percent = (goal.current_amount / goal.target_amount * 100) if goal.target_amount else 0 %}
-                    <div class="progress" style="height: 20px;">
-                        <div class="progress-bar {% if percent >= 100 %}bg-success{% elif percent >= 80 %}bg-warning{% else %}bg-info{% endif %}" 
-                             role="progressbar" style="width: {{ percent|round(0) }}%;" aria-valuenow="{{ percent|round(0) }}" aria-valuemin="0" aria-valuemax="100">
-                            {{ percent|round(0) }}%
+        <div class="card-body">
+            {% if active_goals %}
+                <div class="row g-3">
+                    {% for goal in active_goals %}
+                    <div class="col-md-6 col-lg-4">
+                        <!-- Individual goal card with comprehensive information -->
+                        <div class="card h-100 border-{{ goal.status_color }}">
+                            <div class="card-header bg-light">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">{{ goal.name }}</h6>
+                                    <span class="badge bg-{{ goal.status_color }}">
+                                        {{ goal.status_text }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- Visual progress bar - the most important element -->
+                                <div class="mb-3">
+                                    <div class="progress" style="height: 30px;">
+                                        <div class="progress-bar bg-{{ goal.status_color }}" 
+                                             role="progressbar" 
+                                             style="width: {{ goal.percentage }}%"
+                                             aria-valuenow="{{ goal.percentage }}"
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                            {{ "%.1f"|format(goal.percentage) }}%
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Financial details -->
+                                <div class="row text-center mb-3">
+                                    <div class="col">
+                                        <small class="text-muted">Saved</small>
+                                        <div class="fw-bold text-success">
+                                            ${{ "%.2f"|format(goal.current_amount) }}
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <small class="text-muted">Target</small>
+                                        <div class="fw-bold">
+                                            ${{ "%.2f"|format(goal.target_amount) }}
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <small class="text-muted">Remaining</small>
+                                        <div class="fw-bold text-danger">
+                                            ${{ "%.2f"|format(goal.remaining) }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Time and savings rate information -->
+                                {% if goal.deadline %}
+                                <div class="mb-3">
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar-alt"></i>
+                                        Deadline: {{ goal.deadline }}
+                                    </small>
+                                    <br>
+                                    {% if goal.days_remaining > 0 %}
+                                        <small class="text-muted">
+                                            <i class="fas fa-clock"></i>
+                                            {{ goal.days_remaining }} days remaining
+                                        </small>
+                                        <br>
+                                        {% if goal.monthly_required > 0 %}
+                                            <small class="text-info">
+                                                <i class="fas fa-piggy-bank"></i>
+                                                Save ${{ "%.2f"|format(goal.monthly_required) }}/month to reach goal
+                                            </small>
+                                        {% endif %}
+                                    {% else %}
+                                        <small class="text-danger">
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                            Deadline passed
+                                        </small>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+
+                                <!-- Action buttons -->
+                                <div class="d-flex gap-2">
+                                    <!-- Update progress button -->
+                                    <button class="btn btn-sm btn-success flex-fill" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#updateGoalModal{{ goal.id }}">
+                                        <i class="fas fa-plus-circle"></i> Update
+                                    </button>
+                                    
+                                    <!-- Edit button -->
+                                    <button class="btn btn-sm btn-primary flex-fill" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#editGoalModal{{ goal.id }}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+                                    
+                                    <!-- Delete form -->
+                                    <form method="post" 
+                                          action="{{ url_for('delete_goal', goal_id=goal.id) }}" 
+                                          onsubmit="return confirm('Are you sure you want to delete this goal?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </td>
-                <td>
-                    {% if percent >= 100 %}
-                        <span class="badge bg-success">Completed</span>
-                    {% elif goal.deadline and goal.deadline < now().strftime('%Y-%m-%d') %}
-                        <span class="badge bg-danger">Overdue</span>
-                    {% else %}
-                        <span class="badge bg-secondary">In Progress</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <form method="post" action="{{ url_for('delete_goal', goal_id=goal.id) }}" style="display:inline;">
-                        {{ csrf_token() }}
-                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this goal?');">Delete</button>
-                    </form>
-                </td>
-            </tr>
+
+                    <!-- Update Progress Modal -->
+                    <!-- This modal allows quick additions or withdrawals to goal savings -->
+                    <div class="modal fade" id="updateGoalModal{{ goal.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Update Progress - {{ goal.name }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form method="post" action="{{ url_for('update_goal_progress', goal_id=goal.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="modal-body">
+                                        <p>Current savings: <strong>${{ "%.2f"|format(goal.current_amount) }}</strong></p>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Action</label>
+                                            <div>
+                                                <div class="form-check form-check-inline">
+                                                    <input class="form-check-input" type="radio" 
+                                                           name="action" id="add{{ goal.id }}" 
+                                                           value="add" checked>
+                                                    <label class="form-check-label" for="add{{ goal.id }}">
+                                                        Add to savings
+                                                    </label>
+                                                </div>
+                                                <div class="form-check form-check-inline">
+                                                    <input class="form-check-input" type="radio" 
+                                                           name="action" id="withdraw{{ goal.id }}" 
+                                                           value="withdraw">
+                                                    <label class="form-check-label" for="withdraw{{ goal.id }}">
+                                                        Withdraw from savings
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Amount</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" name="amount" class="form-control" 
+                                                       step="0.01" min="0.01" max="999999.99" required>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                            Cancel
+                                        </button>
+                                        <button type="submit" class="btn btn-success">
+                                            Update Progress
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Edit Goal Modal -->
+                    <!-- Allows users to modify goal parameters -->
+                    <div class="modal fade" id="editGoalModal{{ goal.id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Edit Goal - {{ goal.name }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <form method="post" action="{{ url_for('edit_goal', goal_id=goal.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Goal Name</label>
+                                            <input type="text" name="name" class="form-control" 
+                                                   value="{{ goal.name }}" maxlength="100" required>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Target Amount</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" name="target_amount" class="form-control" 
+                                                       value="{{ goal.target_amount }}" 
+                                                       step="0.01" min="{{ goal.current_amount }}" 
+                                                       max="9999999.99" required>
+                                            </div>
+                                            <small class="text-muted">
+                                                Cannot be less than current savings (${{ "%.2f"|format(goal.current_amount) }})
+                                            </small>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Deadline (Optional)</label>
+                                            <input type="date" name="deadline" class="form-control" 
+                                                   value="{{ goal.deadline }}" 
+                                                   min="{{ current_date }}">
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                            Cancel
+                                        </button>
+                                        <button type="submit" class="btn btn-primary">
+                                            Save Changes
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             {% else %}
-            <tr><td colspan="7" class="text-center">No goals yet.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                <!-- Empty state for no active goals -->
+                <div class="text-center py-5">
+                    <i class="fas fa-bullseye text-muted" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3">No active goals yet</h5>
+                    <p class="text-muted">Create your first savings goal to start tracking your progress</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Add New Goal Section -->
+    <!-- This form allows users to create new savings goals -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-plus-circle"></i> Create New Goal
+            </h5>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('add_goal') }}" id="addGoalForm">
+                <!-- CSRF token for security -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="row g-3">
+                    <!-- Goal Name -->
+                    <div class="col-md-6">
+                        <label for="goal_name" class="form-label">
+                            Goal Name <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" name="name" id="goal_name" 
+                               class="form-control" maxlength="100" 
+                               placeholder="e.g., Emergency Fund, Vacation, New Car" required>
+                        <small class="text-muted">
+                            Give your goal a meaningful name
+                        </small>
+                    </div>
+
+                    <!-- Target Amount -->
+                    <div class="col-md-6">
+                        <label for="target_amount" class="form-label">
+                            Target Amount <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" name="target_amount" id="target_amount" 
+                                   class="form-control" step="0.01" min="1" max="9999999.99" 
+                                   placeholder="0.00" required>
+                        </div>
+                        <small class="text-muted">
+                            How much do you want to save?
+                        </small>
+                    </div>
+
+                    <!-- Initial Amount -->
+                    <div class="col-md-6">
+                        <label for="initial_amount" class="form-label">
+                            Initial Amount (Optional)
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" name="initial_amount" id="initial_amount" 
+                                   class="form-control" step="0.01" min="0" max="9999999.99" 
+                                   placeholder="0.00">
+                        </div>
+                        <small class="text-muted">
+                            Amount you've already saved
+                        </small>
+                    </div>
+
+                    <!-- Deadline -->
+                    <div class="col-md-6">
+                        <label for="deadline" class="form-label">
+                            Target Date (Optional)
+                        </label>
+                        <input type="date" name="deadline" id="deadline" 
+                               class="form-control" min="{{ current_date }}">
+                        <small class="text-muted">
+                            When do you want to reach this goal?
+                        </small>
+                    </div>
+                </div>
+
+                <!-- Submit buttons -->
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus-circle"></i> Create Goal
+                    </button>
+                    <button type="reset" class="btn btn-secondary">
+                        <i class="fas fa-undo"></i> Reset
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Completed Goals Section -->
+    <!-- Shows goals that users have successfully achieved -->
+    {% if completed_goals %}
+    <div class="card">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-trophy"></i> Completed Goals
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                {% for goal in completed_goals %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6>
+                                <i class="fas fa-check-circle text-success"></i>
+                                {{ goal.name }}
+                            </h6>
+                            <p class="mb-1">
+                                <strong>Target:</strong> ${{ "%.2f"|format(goal.target_amount) }}
+                            </p>
+                            <p class="mb-1">
+                                <strong>Saved:</strong> ${{ "%.2f"|format(goal.current_amount) }}
+                            </p>
+                            {% if goal.deadline %}
+                            <p class="mb-0">
+                                <small class="text-muted">
+                                    Deadline was: {{ goal.deadline }}
+                                </small>
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tips Section -->
+    <!-- Educational content to help users set and achieve goals -->
+    <div class="alert alert-success mt-4">
+        <h6><i class="fas fa-lightbulb"></i> Goal Setting Tips</h6>
+        <ul class="mb-0">
+            <li>Start with an emergency fund of 3-6 months of expenses</li>
+            <li>Break large goals into smaller milestones for motivation</li>
+            <li>Set realistic deadlines - better to exceed than fall short</li>
+            <li>Automate savings if possible - treat it like a bill</li>
+            <li>Review and adjust goals quarterly as life changes</li>
+        </ul>
+    </div>
 </div>
+
+<!-- Include Bootstrap JavaScript for modals -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Goals page specific JavaScript -->
+<script>
+// Calculate and display savings suggestions
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-calculate monthly savings needed when setting deadline
+    const targetAmountInput = document.getElementById('target_amount');
+    const initialAmountInput = document.getElementById('initial_amount');
+    const deadlineInput = document.getElementById('deadline');
+    
+    function calculateMonthlySavings() {
+        const target = parseFloat(targetAmountInput.value) || 0;
+        const initial = parseFloat(initialAmountInput.value) || 0;
+        const deadline = deadlineInput.value;
+        
+        if (target > initial && deadline) {
+            const remaining = target - initial;
+            const deadlineDate = new Date(deadline);
+            const today = new Date();
+            const monthsRemaining = Math.max(1, 
+                (deadlineDate.getFullYear() - today.getFullYear()) * 12 + 
+                (deadlineDate.getMonth() - today.getMonth()));
+            
+            const monthlyRequired = remaining / monthsRemaining;
+            
+            // Show suggestion to user
+            const suggestion = document.createElement('div');
+            suggestion.className = 'alert alert-info mt-2';
+            suggestion.innerHTML = `
+                <small>
+                    <i class="fas fa-info-circle"></i>
+                    You'll need to save approximately <strong>$${monthlyRequired.toFixed(2)}/month</strong> 
+                    to reach this goal by the deadline.
+                </small>
+            `;
+            
+            // Remove old suggestion if exists
+            const oldSuggestion = document.querySelector('.savings-suggestion');
+            if (oldSuggestion) oldSuggestion.remove();
+            
+            suggestion.classList.add('savings-suggestion');
+            deadlineInput.parentElement.appendChild(suggestion);
+        }
+    }
+    
+    // Add event listeners for calculation
+    if (targetAmountInput && deadlineInput) {
+        targetAmountInput.addEventListener('change', calculateMonthlySavings);
+        initialAmountInput.addEventListener('change', calculateMonthlySavings);
+        deadlineInput.addEventListener('change', calculateMonthlySavings);
+    }
+    
+    // Form validation
+    document.getElementById('addGoalForm').addEventListener('submit', function(e) {
+        const target = parseFloat(targetAmountInput.value);
+        const initial = parseFloat(initialAmountInput.value) || 0;
+        
+        if (initial > target) {
+            e.preventDefault();
+            alert('Initial amount cannot exceed target amount');
+            return false;
+        }
+    });
+});
+
+// Celebrate completed goals with confetti effect (optional fun feature)
+function celebrateGoal(goalName) {
+    // You could add a confetti library here for visual celebration
+    console.log(`Congratulations on completing ${goalName}!`);
+}
+</script>
 {% endblock %}

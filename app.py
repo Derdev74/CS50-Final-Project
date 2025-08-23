@@ -1009,102 +1009,289 @@ def logout():
         return redirect(url_for('login'))
 
 @app.route("/dashboard")
-@login_required
-def dashboard():
-    if not validate_session():
-        flash('Your session has expired. Please log in again.', 'info')
-        return redirect(url_for('login'))
-    
-    try:
-        user_id = session.get('user_id')
-        user = db.execute("SELECT * FROM users WHERE id = ?", user_id)
-        if not user:
-            session.clear()
-            flash('User account not found. Please log in again.', 'error')
-            return redirect(url_for('login'))
-        balance = user[0]["cash"]
-        transactions = db.execute(
-            "SELECT t.*, c.name as category_name FROM transactions t "
-            "LEFT JOIN categories c ON t.category_id = c.id "
-            "WHERE t.user_id = ? ORDER BY t.date DESC LIMIT 5", 
-            user_id
-        )
-        # Pie chart: spending by category (expenses only)
-        category_data = db.execute("""
-            SELECT c.name, ABS(SUM(t.amount)) as total
-            FROM transactions t
-            JOIN categories c ON t.category_id = c.id
-            WHERE t.user_id = ? AND t.amount < 0
-            GROUP BY c.name
-            ORDER BY total DESC
-        """, user_id)
-        # Line chart: income/expense trend by month (last 6 months)
-        trend_data = db.execute("""
-            SELECT strftime('%Y-%m', date) as month,
-                   SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
-                   ABS(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END)) as expense
-            FROM transactions
-            WHERE user_id = ?
-            GROUP BY month
-            ORDER BY month DESC
-            LIMIT 6
-        """, user_id)
-        trend_data = list(reversed(trend_data))  # Show oldest first
-
-        # Goal progress for chart (optional)
-        goals = db.execute(
-            "SELECT name, target_amount, current_amount FROM goals WHERE user_id = ?", user_id
-        )
-
-        return render_template(
-            "dashboard.html",
-            balance=balance,
-            transactions=transactions,
-            user=user[0],
-            category_data=category_data,
-            trend_data=trend_data,
-            goals=goals
-        )
-    except Exception as e:
-        logger.error(f"Dashboard error for user {session.get('user_id')}: {str(e)}")
-        flash('An error occurred loading the dashboard.', 'error')
-        return redirect(url_for('login'))
-
-    """Dashboard with session validation"""
-    if not validate_session():
-        flash('Your session has expired. Please log in again.', 'info')
-        return redirect(url_for('login'))
-    
-    try:
-        user_id = session.get('user_id')
-        user = db.execute("SELECT * FROM users WHERE id = ?", user_id)
-        
-        if not user:
-            session.clear()
-            flash('User account not found. Please log in again.', 'error')
-            return redirect(url_for('login'))
-        
-        balance = user[0]["cash"]
-        transactions = db.execute(
-            "SELECT t.*, c.name as category_name FROM transactions t "
-            "LEFT JOIN categories c ON t.category_id = c.id "
-            "WHERE t.user_id = ? ORDER BY t.date DESC LIMIT 5", 
-            user_id
-        )
-        
-        return render_template("dashboard.html", balance=balance, transactions=transactions, user=user[0])
-        
-    except Exception as e:
-        logger.error(f"Dashboard error for user {session.get('user_id')}: {str(e)}")
-        flash('An error occurred loading the dashboard.', 'error')
-        return redirect(url_for('login'))
-
 @app.route("/")
 @login_required
-def index():
-    return redirect(url_for("dashboard"))
-
-
+def dashboard():
+    """
+    Enhanced dashboard with comprehensive data visualization.
+    
+    This dashboard serves as the central hub for financial insights, providing:
+    1. Real-time balance information
+    2. Spending breakdown by category (pie chart)
+    3. Income vs expense trends over time (line chart)
+    4. Monthly comparison (bar chart)
+    5. Goal progress visualization
+    6. Recent transaction activity
+    7. Budget status overview
+    
+    The data processing here transforms raw database records into
+    chart-ready formats that Chart.js can consume directly.
+    """
+    if not validate_session():
+        flash('Your session has expired. Please log in again.', 'info')
+        return redirect(url_for('login'))
+    
+    try:
+        user_id = session.get('user_id')
+        
+        # Fetch user information and current balance
+        user = db.execute("SELECT * FROM users WHERE id = ?", user_id)
+        if not user:
+            session.clear()
+            flash('User account not found. Please log in again.', 'error')
+            return redirect(url_for('login'))
+        
+        user = user[0]
+        balance = user["cash"]
+        
+        # Get current date for various calculations
+        current_date = datetime.now()
+        
+        # 1. RECENT TRANSACTIONS (for activity feed)
+        # Show last 10 transactions with category information
+        recent_transactions = db.execute("""
+            SELECT t.*, c.name as category_name, c.type as category_type
+            FROM transactions t
+            LEFT JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = ?
+            ORDER BY t.date DESC
+            LIMIT 10
+        """, user_id)
+        
+        # 2. SPENDING BY CATEGORY (for pie chart)
+        # Only show expenses, grouped by category for current month
+        category_spending = db.execute("""
+            SELECT 
+                c.name as category,
+                ABS(SUM(t.amount)) as total,
+                COUNT(t.id) as transaction_count
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = ? 
+                AND t.amount < 0
+                AND strftime('%Y-%m', t.date) = strftime('%Y-%m', 'now')
+            GROUP BY c.id, c.name
+            ORDER BY total DESC
+        """, user_id)
+        
+        # Prepare pie chart data with colors
+        pie_colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', 
+                      '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384']
+        
+        category_labels = [item['category'] for item in category_spending]
+        category_values = [float(item['total']) for item in category_spending]
+        
+        # 3. INCOME VS EXPENSE TREND (for line chart)
+        # Last 6 months of income and expense data
+        monthly_trend = db.execute("""
+            SELECT 
+                strftime('%Y-%m', date) as month,
+                SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
+                ABS(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END)) as expense
+            FROM transactions
+            WHERE user_id = ?
+                AND date >= date('now', '-6 months')
+            GROUP BY strftime('%Y-%m', date)
+            ORDER BY month
+        """, user_id)
+        
+        # Format month labels for better display
+        trend_labels = []
+        income_data = []
+        expense_data = []
+        
+        for item in monthly_trend:
+            # Convert YYYY-MM to Month Year format
+            year, month = item['month'].split('-')
+            month_name = datetime(int(year), int(month), 1).strftime('%b %Y')
+            trend_labels.append(month_name)
+            income_data.append(float(item['income']))
+            expense_data.append(float(item['expense']))
+        
+        # 4. DAILY SPENDING THIS MONTH (for bar chart)
+        # Shows spending pattern throughout the current month
+        daily_spending = db.execute("""
+            SELECT 
+                strftime('%d', date) as day,
+                ABS(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END)) as spent
+            FROM transactions
+            WHERE user_id = ?
+                AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
+            GROUP BY strftime('%d', date)
+            ORDER BY day
+        """, user_id)
+        
+        # Create full month data (fill in days with no spending)
+        days_in_month = 31  # Simplified, you could calculate actual days
+        daily_labels = [str(i) for i in range(1, days_in_month + 1)]
+        daily_values = [0] * days_in_month
+        
+        for item in daily_spending:
+            day_index = int(item['day']) - 1
+            if day_index < days_in_month:
+                daily_values[day_index] = float(item['spent'])
+        
+        # 5. GOALS PROGRESS (for horizontal bar chart)
+        goals = db.execute("""
+            SELECT 
+                name,
+                target_amount,
+                current_amount,
+                deadline,
+                CASE 
+                    WHEN target_amount > 0 
+                    THEN ROUND((current_amount * 100.0 / target_amount), 1)
+                    ELSE 0 
+                END as progress_percentage
+            FROM goals
+            WHERE user_id = ?
+            ORDER BY deadline IS NULL, deadline
+            LIMIT 5
+        """, user_id)
+        
+        goal_labels = [goal['name'] for goal in goals]
+        goal_progress = [float(goal['progress_percentage']) for goal in goals]
+        
+        # 6. BUDGET STATUS (for radar chart or gauge)
+        # Compare actual spending vs budgeted amounts
+        budget_comparison = db.execute("""
+            SELECT 
+                c.name as category,
+                b.amount as budgeted,
+                COALESCE(ABS(SUM(t.amount)), 0) as spent
+            FROM budgets b
+            JOIN categories c ON b.category_id = c.id
+            LEFT JOIN transactions t ON t.category_id = b.category_id
+                AND t.user_id = b.user_id
+                AND strftime('%Y-%m', t.date) = strftime('%Y-%m', 'now')
+            WHERE b.user_id = ?
+                AND b.period = 'monthly'
+            GROUP BY b.id, c.name, b.amount
+        """, user_id)
+        
+        budget_labels = [item['category'] for item in budget_comparison]
+        budget_amounts = [float(item['budgeted']) for item in budget_comparison]
+        budget_spent = [float(item['spent']) for item in budget_comparison]
+        
+        # 7. FINANCIAL SUMMARY STATISTICS
+        # Calculate key metrics for display cards
+        current_month_income = db.execute("""
+            SELECT COALESCE(SUM(amount), 0) as total
+            FROM transactions
+            WHERE user_id = ? 
+                AND amount > 0
+                AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
+        """, user_id)[0]['total']
+        
+        current_month_expense = db.execute("""
+            SELECT COALESCE(ABS(SUM(amount)), 0) as total
+            FROM transactions
+            WHERE user_id = ? 
+                AND amount < 0
+                AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
+        """, user_id)[0]['total']
+        
+        # Calculate savings rate
+        if current_month_income > 0:
+            savings_rate = ((current_month_income - current_month_expense) / current_month_income) * 100
+        else:
+            savings_rate = 0
+        
+        # Get total number of transactions this month for activity indicator
+        transaction_count = db.execute("""
+            SELECT COUNT(*) as count
+            FROM transactions
+            WHERE user_id = ?
+                AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
+        """, user_id)[0]['count']
+        
+        # 8. TOP SPENDING CATEGORIES THIS MONTH (for quick insights)
+        top_categories = db.execute("""
+            SELECT 
+                c.name,
+                ABS(SUM(t.amount)) as total,
+                COUNT(t.id) as count
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = ? 
+                AND t.amount < 0
+                AND strftime('%Y-%m', date) = strftime('%Y-%m', 'now')
+            GROUP BY c.id
+            ORDER BY total DESC
+            LIMIT 3
+        """, user_id)
+        
+        return render_template("dashboard.html",
+            # User data
+            user=user,
+            balance=balance,
+            
+            # Transaction data
+            recent_transactions=recent_transactions,
+            transaction_count=transaction_count,
+            
+            # Pie chart data (spending by category)
+            category_labels=category_labels,
+            category_values=category_values,
+            pie_colors=pie_colors[:len(category_labels)],
+            
+            # Line chart data (income vs expense trend)
+            trend_labels=trend_labels,
+            income_data=income_data,
+            expense_data=expense_data,
+            
+            # Bar chart data (daily spending)
+            daily_labels=daily_labels,
+            daily_values=daily_values,
+            
+            # Goals data
+            goal_labels=goal_labels,
+            goal_progress=goal_progress,
+            
+            # Budget comparison data
+            budget_labels=budget_labels,
+            budget_amounts=budget_amounts,
+            budget_spent=budget_spent,
+            
+            # Summary statistics
+            current_month_income=current_month_income,
+            current_month_expense=current_month_expense,
+            savings_rate=savings_rate,
+            top_categories=top_categories,
+            
+            # Current date for display
+            current_date=current_date.strftime('%B %Y')
+        )
+        
+    except Exception as e:
+        logger.error(f"Dashboard error for user {session.get('user_id')}: {str(e)}")
+        flash('An error occurred loading the dashboard. Please try again.', 'error')
+        
+        # Return dashboard with empty data to prevent template errors
+        return render_template("dashboard.html",
+            user={"username": "User", "cash": 0},
+            balance=0,
+            recent_transactions=[],
+            transaction_count=0,
+            category_labels=[],
+            category_values=[],
+            pie_colors=[],
+            trend_labels=[],
+            income_data=[],
+            expense_data=[],
+            daily_labels=[],
+            daily_values=[],
+            goal_labels=[],
+            goal_progress=[],
+            budget_labels=[],
+            budget_amounts=[],
+            budget_spent=[],
+            current_month_income=0,
+            current_month_expense=0,
+            savings_rate=0,
+            top_categories=[],
+            current_date=datetime.now().strftime('%B %Y')
+        )
 @app.route("/transactions", methods=["GET"])
 @login_required
 def transactions():
@@ -1744,72 +1931,462 @@ def delete_budget(budget_id):
     
     return redirect(url_for('budget'))
 
-class GoalForm(FlaskForm):
-    name = StringField('Goal Name', validators=[DataRequired(), Length(max=100)])
-    target_amount = DecimalField('Target Amount', validators=[DataRequired(), NumberRange(min=0.01)])
-    deadline = DateField('Deadline', validators=[Optional()])
-    submit = SubmitField('Add Goal')
-
-@app.route("/goals", methods=["GET", "POST"])
+@app.route("/goals", methods=["GET"])
 @login_required
 def goals():
-    """Display, add, and manage financial goals with security and validation."""
+    """
+    Display all savings goals with progress tracking and intelligent insights.
+    
+    This function creates a comprehensive view of the user's financial goals,
+    calculating progress, determining required savings rates, and providing
+    actionable feedback. Think of it as a financial roadmap showing multiple
+    destinations and how to reach each one.
+    
+    The system handles various goal states:
+    - Active goals: Currently being worked toward
+    - Completed goals: Successfully achieved (celebration!)
+    - Overdue goals: Deadline passed but not completed (needs attention)
+    - On track: Progressing well toward deadline
+    - Behind schedule: Needs increased savings rate
+    """
     if not validate_session():
         return redirect(url_for('login'))
-
+    
     user_id = session.get('user_id')
-    form = GoalForm()
-
-    if form.validate_on_submit():
-        name = form.name.data.strip()
-        target_amount = float(form.target_amount.data)
-        deadline = form.deadline.data.isoformat() if form.deadline.data else None
-
-        db.execute(
-            "INSERT INTO goals (user_id, name, target_amount, deadline) VALUES (?, ?, ?, ?)",
-            user_id, name, target_amount, deadline
-        )
-        flash("Goal added!", "success")
-        log_security_event(user_id, 'GOAL_ADDED', f'Goal: {name}, Target: {target_amount}')
-        return redirect(url_for("goals"))
-
-    # Fetch user's goals
-    goals = db.execute(
-        "SELECT * FROM goals WHERE user_id = ? ORDER BY deadline IS NULL, deadline", user_id
-    )
-    return render_template("goals.html", form=form, goals=goals)
-
-@app.route("/goals/<int:goal_id>/update", methods=["POST"])
-@login_required
-def update_goal(goal_id):
-    """Update current progress towards a goal."""
-    if not validate_session():
-        return redirect(url_for('login'))
-    user_id = session.get('user_id')
+    
     try:
-        amount_str = request.form.get('current_amount', '').strip()
-        if not amount_str:
-            flash('Current amount is required.', 'error')
-            return redirect(url_for('goals'))
-        current_amount = Decimal(amount_str)
-        if current_amount < 0:
-            flash('Current amount cannot be negative.', 'error')
-            return redirect(url_for('goals'))
-        # Update only if the goal belongs to the user
-        db.execute(
-            "UPDATE goals SET current_amount = ? WHERE id = ? AND user_id = ?",
-            float(current_amount), goal_id, user_id
-        )
-        flash('Goal progress updated!', 'success')
-        log_security_event(user_id, 'GOAL_PROGRESS_UPDATED', f'Goal ID: {goal_id}, Progress: {current_amount}')
+        # Fetch all goals for the user
+        # We'll process each one to add calculated fields for the template
+        goals_list = db.execute("""
+            SELECT id, name, target_amount, current_amount, deadline,
+                   created_at
+            FROM goals
+            WHERE user_id = ?
+            ORDER BY deadline ASC, created_at DESC
+        """, user_id)
+        
+        current_date = datetime.now().date()
+        
+        # Process each goal to calculate progress and required savings
+        # This is where we add intelligence to raw data
+        for goal in goals_list:
+            # Calculate basic progress percentage
+            # We cap at 100% for display even if over-saved
+            target = Decimal(str(goal['target_amount']))
+            current = Decimal(str(goal['current_amount']))
+            goal['percentage'] = min(float((current / target) * 100), 100) if target > 0 else 0
+            
+            # Calculate remaining amount needed
+            goal['remaining'] = float(target - current)
+            
+            # Parse deadline and calculate time-based metrics
+            if goal['deadline']:
+                deadline_date = datetime.strptime(goal['deadline'], '%Y-%m-%d').date()
+                days_remaining = (deadline_date - current_date).days
+                goal['days_remaining'] = max(days_remaining, 0)  # Don't show negative days
+                
+                # Calculate months remaining for monthly savings calculation
+                # This handles partial months more accurately than just days/30
+                months_remaining = 0
+                temp_date = current_date
+                while temp_date < deadline_date:
+                    # Move to next month
+                    if temp_date.month == 12:
+                        temp_date = temp_date.replace(year=temp_date.year + 1, month=1)
+                    else:
+                        temp_date = temp_date.replace(month=temp_date.month + 1)
+                    months_remaining += 1
+                
+                goal['months_remaining'] = max(months_remaining, 0)
+                
+                # Calculate required monthly savings to meet goal
+                # This helps users understand what they need to save each month
+                if months_remaining > 0 and goal['remaining'] > 0:
+                    goal['monthly_required'] = goal['remaining'] / months_remaining
+                else:
+                    goal['monthly_required'] = 0
+                
+                # Determine goal status for visual indicators
+                if goal['percentage'] >= 100:
+                    goal['status'] = 'completed'
+                    goal['status_text'] = 'Completed!'
+                    goal['status_color'] = 'success'
+                elif days_remaining < 0:
+                    goal['status'] = 'overdue'
+                    goal['status_text'] = 'Overdue'
+                    goal['status_color'] = 'danger'
+                elif days_remaining <= 30:
+                    goal['status'] = 'urgent'
+                    goal['status_text'] = f'{days_remaining} days left'
+                    goal['status_color'] = 'warning'
+                else:
+                    # Check if on track based on time vs progress
+                    # If you've used 50% of time, you should have 50% of money saved
+                    created_date = datetime.fromisoformat(goal['created_at']).date()
+                    total_days = (deadline_date - created_date).days
+                    days_elapsed = (current_date - created_date).days
+                    
+                    if total_days > 0:
+                        time_percentage = (days_elapsed / total_days) * 100
+                        # Give 10% buffer for "on track" status
+                        if goal['percentage'] >= (time_percentage - 10):
+                            goal['status'] = 'on_track'
+                            goal['status_text'] = 'On Track'
+                            goal['status_color'] = 'success'
+                        else:
+                            goal['status'] = 'behind'
+                            goal['status_text'] = 'Behind Schedule'
+                            goal['status_color'] = 'warning'
+                    else:
+                        goal['status'] = 'on_track'
+                        goal['status_text'] = 'On Track'
+                        goal['status_color'] = 'success'
+            else:
+                # No deadline set
+                goal['deadline'] = None
+                goal['days_remaining'] = None
+                goal['months_remaining'] = None
+                goal['monthly_required'] = 0
+                goal['status'] = 'no_deadline'
+                goal['status_text'] = 'No Deadline'
+                goal['status_color'] = 'info'
+        
+        # Separate goals by status for organized display
+        # This makes the UI cleaner and helps users focus on what needs attention
+        active_goals = [g for g in goals_list if g['status'] not in ['completed']]
+        completed_goals = [g for g in goals_list if g['status'] == 'completed']
+        
+        # Calculate summary statistics for motivation
+        total_goals = len(goals_list)
+        completed_count = len(completed_goals)
+        total_saved = sum(Decimal(str(g['current_amount'])) for g in goals_list)
+        total_target = sum(Decimal(str(g['target_amount'])) for g in goals_list)
+        
+        # Get user's current balance to show available funds
+        user = db.execute("SELECT cash FROM users WHERE id = ?", user_id)[0]
+        available_funds = user['cash']
+        
+        return render_template("goals.html",
+                             active_goals=active_goals,
+                             completed_goals=completed_goals,
+                             total_goals=total_goals,
+                             completed_count=completed_count,
+                             total_saved=float(total_saved),
+                             total_target=float(total_target),
+                             available_funds=available_funds,
+                             current_date=current_date.isoformat())
+        
     except Exception as e:
-        logger.error(f"Error updating goal progress: {str(e)}")
-        flash('Failed to update goal progress.', 'error')
+        logger.error(f"Error loading goals for user {user_id}: {str(e)}")
+        flash('Failed to load goals. Please try again.', 'error')
+        return render_template("goals.html", active_goals=[], completed_goals=[])
+
+@app.route("/goal/add", methods=["POST"])
+@login_required
+def add_goal():
+    """
+    Add a new savings goal with comprehensive validation.
+    
+    Security considerations:
+    - Input validation prevents unrealistic or malicious values
+    - Decimal type ensures precise financial calculations
+    - CSRF protection through form tokens
+    - SQL injection prevention through parameterized queries
+    
+    The validation logic ensures goals are achievable and realistic,
+    preventing user frustration from impossible targets.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Validate goal name
+    # Names help users emotionally connect with their goals
+    goal_name = request.form.get('name', '').strip()[:100]  # Limit length
+    if not goal_name:
+        flash('Goal name is required.', 'error')
+        return redirect(url_for('goals'))
+    
+    # Validate target amount using Decimal for precision
+    # Financial calculations must be exact, not approximate
+    target_amount_str = request.form.get('target_amount', '').strip()
+    if not target_amount_str:
+        flash('Target amount is required.', 'error')
+        return redirect(url_for('goals'))
+    
+    try:
+        target_amount = Decimal(target_amount_str)
+        
+        # Validate reasonable amounts
+        # Too small = not worth tracking, too large = likely an error
+        if target_amount <= 0:
+            flash('Target amount must be positive.', 'error')
+            return redirect(url_for('goals'))
+        
+        if target_amount < Decimal('1'):
+            flash('Target amount must be at least $1.', 'error')
+            return redirect(url_for('goals'))
+            
+        if target_amount > Decimal('9999999.99'):
+            flash('Target amount is too large. Please set a realistic goal.', 'error')
+            return redirect(url_for('goals'))
+            
+    except (InvalidOperation, ValueError):
+        flash('Invalid target amount format.', 'error')
+        return redirect(url_for('goals'))
+    
+    # Validate initial amount (optional)
+    # Users might already have some savings toward this goal
+    initial_amount_str = request.form.get('initial_amount', '').strip()
+    if initial_amount_str:
+        try:
+            initial_amount = Decimal(initial_amount_str)
+            
+            if initial_amount < 0:
+                flash('Initial amount cannot be negative.', 'error')
+                return redirect(url_for('goals'))
+                
+            if initial_amount > target_amount:
+                flash('Initial amount cannot exceed target amount.', 'error')
+                return redirect(url_for('goals'))
+                
+        except (InvalidOperation, ValueError):
+            initial_amount = Decimal('0')
+    else:
+        initial_amount = Decimal('0')
+    
+    # Validate deadline (optional but recommended)
+    # Deadlines create urgency and help calculate required savings rate
+    deadline_str = request.form.get('deadline', '').strip()
+    if deadline_str:
+        try:
+            deadline = datetime.strptime(deadline_str, '%Y-%m-%d').date()
+            
+            # Deadline must be in the future
+            if deadline <= datetime.now().date():
+                flash('Deadline must be in the future.', 'error')
+                return redirect(url_for('goals'))
+            
+            # Prevent unrealistic deadlines (too far in future)
+            # 20 years is reasonable for long-term goals like retirement
+            if deadline > datetime.now().date() + timedelta(days=365*20):
+                flash('Deadline cannot be more than 20 years in the future.', 'error')
+                return redirect(url_for('goals'))
+                
+        except ValueError:
+            flash('Invalid date format.', 'error')
+            return redirect(url_for('goals'))
+    else:
+        deadline_str = None  # NULL in database for no deadline
+    
+    try:
+        # Insert the new goal
+        goal_id = db.execute("""
+            INSERT INTO goals (user_id, name, target_amount, current_amount, deadline)
+            VALUES (?, ?, ?, ?, ?)
+        """, user_id, goal_name, float(target_amount), float(initial_amount), deadline_str)
+        
+        # Log the goal creation for analytics
+        log_security_event(user_id, 'GOAL_CREATED', 
+                         f'Goal: {goal_name}, Target: ${target_amount}, ID: {goal_id}')
+        
+        flash(f'Goal "{goal_name}" created successfully! Start saving to reach your target.', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error creating goal for user {user_id}: {str(e)}")
+        flash('Failed to create goal. Please try again.', 'error')
+    
     return redirect(url_for('goals'))
 
-@app.route("/goals/<int:goal_id>/delete", methods=["POST"])
+@app.route("/goal/<int:goal_id>/update", methods=["POST"])
 @login_required
-def delete_goal(goal_id):
+def update_goal_progress():
+    """
+    Update progress on a savings goal (add or withdraw funds).
+    
+    This is the heart of goal tracking - users add money when they save
+    and might withdraw if they need funds for emergencies. The system
+    tracks both directions and maintains an accurate current amount.
+    
+    Security: Verifies goal ownership before allowing updates.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Verify goal belongs to user - critical security check
+    goal = db.execute("""
+        SELECT * FROM goals 
+        WHERE id = ? AND user_id = ?
+    """, goal_id, user_id)
+    
+    if not goal:
+        flash('Goal not found or access denied.', 'error')
+        return redirect(url_for('goals'))
+    
+    goal = goal[0]
+    
+    # Get the amount to add/subtract
+    amount_str = request.form.get('amount', '').strip()
+    action = request.form.get('action', 'add')  # 'add' or 'withdraw'
+    
+    if not amount_str:
+        flash('Amount is required.', 'error')
+        return redirect(url_for('goals'))
+    
+    try:
+        amount = Decimal(amount_str)
+        
+        if amount <= 0:
+            flash('Amount must be positive.', 'error')
+            return redirect(url_for('goals'))
+        
+        if amount > Decimal('999999.99'):
+            flash('Amount is too large.', 'error')
+            return redirect(url_for('goals'))
+        
+        current_amount = Decimal(str(goal['current_amount']))
+        
+        # Calculate new amount based on action
+        if action == 'withdraw':
+            new_amount = current_amount - amount
+            if new_amount < 0:
+                flash('Cannot withdraw more than current savings.', 'error')
+                return redirect(url_for('goals'))
+        else:  # add
+            new_amount = current_amount + amount
+            # Optional: Check if exceeding target (not an error, just info)
+            if new_amount > Decimal(str(goal['target_amount'])):
+                flash('Great job! You\'ve exceeded your target!', 'info')
+        
+        # Update the goal's current amount
+        db.execute("""
+            UPDATE goals 
+            SET current_amount = ?
+            WHERE id = ? AND user_id = ?
+        """, float(new_amount), goal_id, user_id)
+        
+        # Log the update
+        action_text = "Added" if action == 'add' else "Withdrew"
+        log_security_event(user_id, 'GOAL_PROGRESS_UPDATED', 
+                         f'{action_text} ${amount} for goal ID: {goal_id}')
+        
+        # Provide encouraging feedback based on progress
+        if new_amount >= Decimal(str(goal['target_amount'])):
+            flash(f'Congratulations! You\'ve reached your goal "{goal["name"]}"! 🎉', 'success')
+        else:
+            percentage = float((new_amount / Decimal(str(goal['target_amount']))) * 100)
+            flash(f'Progress updated! You\'re now {percentage:.1f}% toward your goal.', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error updating goal {goal_id}: {str(e)}")
+        flash('Failed to update goal progress.', 'error')
+    
+    return redirect(url_for('goals'))
+
+@app.route("/goal/<int:goal_id>/edit", methods=["POST"])
+@login_required
+def edit_goal():
+    """
+    Edit goal details (name, target amount, deadline).
+    
+    Users might need to adjust their goals based on changing circumstances.
+    This flexibility prevents goals from becoming sources of stress when
+    life situations change.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Verify ownership
+    goal = db.execute("""
+        SELECT * FROM goals 
+        WHERE id = ? AND user_id = ?
+    """, goal_id, user_id)
+    
+    if not goal:
+        flash('Goal not found or access denied.', 'error')
+        return redirect(url_for('goals'))
+    
+    # Validate new values (similar to add_goal)
+    name = request.form.get('name', '').strip()[:100]
+    target_amount_str = request.form.get('target_amount', '').strip()
+    deadline_str = request.form.get('deadline', '').strip()
+    
+    if not name:
+        flash('Goal name is required.', 'error')
+        return redirect(url_for('goals'))
+    
+    try:
+        target_amount = Decimal(target_amount_str)
+        
+        if target_amount <= 0 or target_amount > Decimal('9999999.99'):
+            flash('Invalid target amount.', 'error')
+            return redirect(url_for('goals'))
+        
+        # Can't set target below current savings
+        current_amount = Decimal(str(goal[0]['current_amount']))
+        if target_amount < current_amount:
+            flash('Target amount cannot be less than current savings.', 'error')
+            return redirect(url_for('goals'))
+        
+        # Validate deadline if provided
+        if deadline_str:
+            deadline = datetime.strptime(deadline_str, '%Y-%m-%d').date()
+            if deadline <= datetime.now().date():
+                flash('Deadline must be in the future.', 'error')
+                return redirect(url_for('goals'))
+        else:
+            deadline_str = None
+        
+        # Update goal
+        db.execute("""
+            UPDATE goals 
+            SET name = ?, target_amount = ?, deadline = ?
+            WHERE id = ? AND user_id = ?
+        """, name, float(target_amount), deadline_str, goal_id, user_id)
+        
+        log_security_event(user_id, 'GOAL_EDITED', f'Goal ID: {goal_id}')
+        flash('Goal updated successfully!', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error editing goal {goal_id}: {str(e)}")
+        flash('Failed to update goal.', 'error')
+    
+    return redirect(url_for('goals'))
+
+@app.route("/goal/<int:goal_id>/delete", methods=["POST"])
+@login_required
+def delete_goal():
+    """
+    Delete a savings goal.
+    
+    Sometimes goals become irrelevant or users want to start fresh.
+    This doesn't affect any transactions, just removes the goal tracking.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Delete goal if it belongs to user
+        result = db.execute("""
+            DELETE FROM goals 
+            WHERE id = ? AND user_id = ?
+        """, goal_id, user_id)
+        
+        log_security_event(user_id, 'GOAL_DELETED', f'Goal ID: {goal_id}')
+        flash('Goal deleted successfully.', 'info')
+        
+    except Exception as e:
+        logger.error(f"Error deleting goal {goal_id}: {str(e)}")
+        flash('Failed to delete goal.', 'error')
+    
+    return redirect(url_for('goals'))
     """Delete a goal securely."""
     if not validate_session():
         return redirect(url_for('login'))

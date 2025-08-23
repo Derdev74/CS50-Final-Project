@@ -69,7 +69,6 @@
 {% block scripts %}
 // Chart.js: Render a placeholder doughnut chart
 // In production, replace with real data from Flask/Jinja
-{% block content %}
 
 <!-- ...existing dashboard content... -->
 <!-- Chart.js CDN -->
@@ -127,7 +126,7 @@
             labels: {{ goals|map(attribute='name')|list|tojson }},
             datasets: [{
                 label: 'Progress (%)',
-                data: {{ goals|map(g => (g.current_amount / g.target_amount * 100 if g.target_amount else 0))|list|tojson }},
+                data: {{ goal_progress|tojson }},
                 backgroundColor: '#4BC0C0'
             }]
         },

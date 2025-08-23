@@ -1,139 +1,559 @@
 {% extends "layout.html" %}
 
-{# Set the page title #}
 {% block title %}Dashboard - FinTrack{% endblock %}
 
-{# Main content block #}
 {% block content %}
-<h1 class="mb-4">Welcome to FinTrack</h1>
+<div class="container-fluid mt-4">
+    <!-- Dashboard Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Welcome back, {{ user.username }}!</h2>
+            <p class="text-muted">Here's your financial overview for {{ current_date }}</p>
+        </div>
+    </div>
 
-<div class="container mt-4">
-    <h2>Dashboard</h2>
-    <div class="row">
-        <div class="col-md-6">
-            <canvas id="categoryPie"></canvas>
+    <!-- Key Metrics Cards Row -->
+    <div class="row mb-4">
+        <!-- Current Balance Card -->
+        <div class="col-md-3 mb-3">
+            <div class="card border-primary">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        <i class="fas fa-wallet"></i> Current Balance
+                    </h6>
+                    <h3 class="card-title mb-0 text-primary">
+                        ${{ "%.2f"|format(balance) }}
+                    </h3>
+                </div>
+            </div>
         </div>
-        <div class="col-md-6">
-            <canvas id="trendLine"></canvas>
+
+        <!-- Monthly Income Card -->
+        <div class="col-md-3 mb-3">
+            <div class="card border-success">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        <i class="fas fa-arrow-up"></i> This Month's Income
+                    </h6>
+                    <h3 class="card-title mb-0 text-success">
+                        ${{ "%.2f"|format(current_month_income) }}
+                    </h3>
+                </div>
+            </div>
         </div>
-    </div>
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <canvas id="goalsBar"></canvas>
+
+        <!-- Monthly Expenses Card -->
+        <div class="col-md-3 mb-3">
+            <div class="card border-danger">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        <i class="fas fa-arrow-down"></i> This Month's Expenses
+                    </h6>
+                    <h3 class="card-title mb-0 text-danger">
+                        ${{ "%.2f"|format(current_month_expense) }}
+                    </h3>
+                </div>
+            </div>
         </div>
-    </div>
-<!-- Balance Card -->
-<div class="row mb-4">
-    <div class="col-md-4">
-        <!-- Card for current balance, themed by CSS variables -->
-        <div class="card mb-3" style="background: var(--success-color); color: var(--bg-primary); box-shadow: var(--shadow-md);">
-            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color); color: var(--bg-primary);">Current Balance</div>
-            <div class="card-body">
-                <h4 class="card-title">${{ balance }}</h4>
+
+        <!-- Savings Rate Card -->
+        <div class="col-md-3 mb-3">
+            <div class="card border-info">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        <i class="fas fa-piggy-bank"></i> Savings Rate
+                    </h6>
+                    <h3 class="card-title mb-0 text-info">
+                        {{ "%.1f"|format(savings_rate) }}%
+                    </h3>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="row">
-    <!-- Recent Transactions List -->
-    <div class="col-md-8">
-        <div class="card mb-3" style="box-shadow: var(--shadow-sm); background: var(--bg-primary); color: var(--text-primary);">
-            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color);">Recent Transactions</div>
-            <ul class="list-group list-group-flush">
-                {% for txn in transactions %}
-                <li class="list-group-item d-flex justify-content-between align-items-center" style="background: var(--bg-secondary); color: var(--text-primary);">
-                    <span>{{ txn["description"] or "(No description)" }}</span>
-                    <span class="badge" style="background: var(--primary-color); color: var(--bg-primary);">${{ txn["amount"] }}</span>
-                </li>
-                {% else %}
-                <li class="list-group-item" style="background: var(--bg-secondary); color: var(--text-muted);">No recent transactions.</li>
-                {% endfor %}
-            </ul>
+    <!-- Main Charts Row -->
+    <div class="row mb-4">
+        <!-- Spending by Category Pie Chart -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-pie"></i> Spending by Category
+                    </h5>
+                    <small class="text-muted">Current month breakdown</small>
+                </div>
+                <div class="card-body">
+                    <canvas id="categoryPieChart" width="400" height="400"></canvas>
+                    {% if not category_labels %}
+                        <p class="text-center text-muted mt-3">No expenses this month yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Income vs Expense Trend Line Chart -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line"></i> Income vs Expenses Trend
+                    </h5>
+                    <small class="text-muted">Last 6 months</small>
+                </div>
+                <div class="card-body">
+                    <canvas id="trendLineChart" width="400" height="400"></canvas>
+                    {% if not trend_labels %}
+                        <p class="text-center text-muted mt-3">Not enough data for trends yet</p>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Spending Chart Card -->
-    <div class="col-md-4">
-        <div class="card mb-3" style="box-shadow: var(--shadow-sm); background: var(--bg-primary); color: var(--text-primary);">
-            <div class="card-header" style="background: transparent; border-bottom: 1px solid var(--border-color);">Spending Chart</div>
-            <div class="card-body">
-                <canvas id="spendingChart" width="100%" height="100"></canvas>
+    <!-- Secondary Charts Row -->
+    <div class="row mb-4">
+        <!-- Daily Spending Bar Chart -->
+        <div class="col-md-8 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar"></i> Daily Spending Pattern
+                    </h5>
+                    <small class="text-muted">This month's daily expenses</small>
+                </div>
+                <div class="card-body">
+                    <canvas id="dailySpendingChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Spending Categories -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-fire"></i> Top Spending Categories
+                    </h5>
+                    <small class="text-muted">This month</small>
+                </div>
+                <div class="card-body">
+                    {% if top_categories %}
+                        <div class="list-group list-group-flush">
+                            {% for category in top_categories %}
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-0">{{ category.name }}</h6>
+                                        <small class="text-muted">
+                                            {{ category.count }} transactions
+                                        </small>
+                                    </div>
+                                    <span class="badge bg-danger rounded-pill">
+                                        ${{ "%.2f"|format(category.total) }}
+                                    </span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-center text-muted">No spending data yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Goals and Budget Row -->
+    <div class="row mb-4">
+        <!-- Goals Progress Chart -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bullseye"></i> Goals Progress
+                    </h5>
+                    <small class="text-muted">Your savings goals</small>
+                </div>
+                <div class="card-body">
+                    {% if goal_labels %}
+                        <canvas id="goalsChart" width="400" height="300"></canvas>
+                    {% else %}
+                        <p class="text-center text-muted">
+                            No goals set yet. 
+                            <a href="{{ url_for('goals') }}">Create your first goal</a>
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Budget vs Actual Spending -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="fas fa-balance-scale"></i> Budget vs Actual
+                    </h5>
+                    <small class="text-muted">Monthly budget comparison</small>
+                </div>
+                <div class="card-body">
+                    {% if budget_labels %}
+                        <canvas id="budgetChart" width="400" height="300"></canvas>
+                    {% else %}
+                        <p class="text-center text-muted">
+                            No budgets set yet. 
+                            <a href="{{ url_for('budget') }}">Create your first budget</a>
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list"></i> Recent Transactions
+                        </h5>
+                        <a href="{{ url_for('transactions') }}" class="btn btn-sm btn-outline-primary">
+                            View All
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if recent_transactions %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Description</th>
+                                        <th>Category</th>
+                                        <th class="text-end">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for txn in recent_transactions %}
+                                    <tr>
+                                        <td>{{ txn.date[:10] }}</td>
+                                        <td>{{ txn.description or "(No description)" }}</td>
+                                        <td>
+                                            <span class="badge bg-secondary">
+                                                {{ txn.category_name or "Uncategorized" }}
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="{% if txn.amount < 0 %}text-danger{% else %}text-success{% endif %}">
+                                                {% if txn.amount < 0 %}-{% else %}+{% endif %}
+                                                ${{ "%.2f"|format(txn.amount|abs) }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-center text-muted">
+                            No transactions yet. 
+                            <a href="{{ url_for('transactions') }}">Add your first transaction</a>
+                        </p>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{# Scripts block for page-specific JS #}
 {% block scripts %}
-// Chart.js: Render a placeholder doughnut chart
-// In production, replace with real data from Flask/Jinja
+<!-- Chart.js Library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-<!-- ...existing dashboard content... -->
-<!-- Chart.js CDN -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // Pie Chart: Spending by Category
-    const categoryPie = document.getElementById('categoryPie').getContext('2d');
-    new Chart(categoryPie, {
-        type: 'pie',
-        data: {
-            labels: {{ category_data|map(attribute='name')|list|tojson }},
-            datasets: [{
-                data: {{ category_data|map(attribute='total')|list|tojson }},
-                backgroundColor: [
-                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
-                ]
-            }]
-        },
-        options: {
-            plugins: { title: { display: true, text: 'Spending by Category' } }
-        }
-    });
+// Chart.js Global Configuration
+Chart.defaults.font.family = "'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif";
+Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+Chart.defaults.plugins.tooltip.padding = 12;
+Chart.defaults.plugins.tooltip.cornerRadius = 8;
 
-    // Line Chart: Income/Expense Trend
-    const trendLine = document.getElementById('trendLine').getContext('2d');
-    new Chart(trendLine, {
-        type: 'line',
-        data: {
-            labels: {{ trend_data|map(attribute='month')|list|tojson }},
-            datasets: [
-                {
-                    label: 'Income',
-                    data: {{ trend_data|map(attribute='income')|list|tojson }},
-                    borderColor: '#36A2EB',
-                    fill: false
-                },
-                {
-                    label: 'Expense',
-                    data: {{ trend_data|map(attribute='expense')|list|tojson }},
-                    borderColor: '#FF6384',
-                    fill: false
+// 1. SPENDING BY CATEGORY PIE CHART
+{% if category_labels %}
+const categoryPieCtx = document.getElementById('categoryPieChart').getContext('2d');
+const categoryPieChart = new Chart(categoryPieCtx, {
+    type: 'doughnut',
+    data: {
+        labels: {{ category_labels | tojson }},
+        datasets: [{
+            data: {{ category_values | tojson }},
+            backgroundColor: {{ pie_colors | tojson }},
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    padding: 15,
+                    font: {
+                        size: 12
+                    }
                 }
-            ]
-        },
-        options: {
-            plugins: { title: { display: true, text: 'Income/Expense Trend (Last 6 Months)' } }
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const label = context.label || '';
+                        const value = '$' + context.parsed.toFixed(2);
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = ((context.parsed / total) * 100).toFixed(1);
+                        return label + ': ' + value + ' (' + percentage + '%)';
+                    }
+                }
+            }
         }
-    });
+    }
+});
+{% endif %}
 
-    // Bar Chart: Goal Progress
-    const goalsBar = document.getElementById('goalsBar').getContext('2d');
-    new Chart(goalsBar, {
-        type: 'bar',
-        data: {
-            labels: {{ goals|map(attribute='name')|list|tojson }},
-            datasets: [{
-                label: 'Progress (%)',
-                data: {{ goal_progress|tojson }},
-                backgroundColor: '#4BC0C0'
-            }]
+// 2. INCOME VS EXPENSE TREND LINE CHART
+{% if trend_labels %}
+const trendLineCtx = document.getElementById('trendLineChart').getContext('2d');
+const trendLineChart = new Chart(trendLineCtx, {
+    type: 'line',
+    data: {
+        labels: {{ trend_labels | tojson }},
+        datasets: [{
+            label: 'Income',
+            data: {{ income_data | tojson }},
+            borderColor: '#28a745',
+            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+            fill: true,
+            tension: 0.4
+        }, {
+            label: 'Expenses',
+            data: {{ expense_data | tojson }},
+            borderColor: '#dc3545',
+            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+            fill: true,
+            tension: 0.4
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+            mode: 'index',
+            intersect: false
         },
-        options: {
-            plugins: { title: { display: true, text: 'Goal Progress' } },
-            scales: { y: { beginAtZero: true, max: 100 } }
+        plugins: {
+            legend: {
+                position: 'top',
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return '$' + value.toLocaleString();
+                    }
+                }
+            }
         }
+    }
+});
+{% endif %}
+
+// 3. DAILY SPENDING BAR CHART
+const dailySpendingCtx = document.getElementById('dailySpendingChart').getContext('2d');
+const dailySpendingChart = new Chart(dailySpendingCtx, {
+    type: 'bar',
+    data: {
+        labels: {{ daily_labels | tojson }},
+        datasets: [{
+            label: 'Daily Spending',
+            data: {{ daily_values | tojson }},
+            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return 'Spent: $' + context.parsed.y.toFixed(2);
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return '$' + value;
+                    }
+                }
+            },
+            x: {
+                grid: {
+                    display: false
+                }
+            }
+        }
+    }
+});
+
+// 4. GOALS PROGRESS HORIZONTAL BAR CHART
+{% if goal_labels %}
+const goalsCtx = document.getElementById('goalsChart').getContext('2d');
+const goalsChart = new Chart(goalsCtx, {
+    type: 'bar',
+    data: {
+        labels: {{ goal_labels | tojson }},
+        datasets: [{
+            label: 'Progress',
+            data: {{ goal_progress | tojson }},
+            backgroundColor: function(context) {
+                const value = context.parsed.x;
+                if (value >= 100) return '#28a745';
+                if (value >= 75) return '#ffc107';
+                if (value >= 50) return '#17a2b8';
+                return '#6c757d';
+            },
+            borderWidth: 1
+        }]
+    },
+    options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.parsed.x.toFixed(1) + '% complete';
+                    }
+                }
+            }
+        },
+        scales: {
+            x: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                    callback: function(value) {
+                        return value + '%';
+                    }
+                }
+            }
+        }
+    }
+});
+{% endif %}
+
+// 5. BUDGET VS ACTUAL GROUPED BAR CHART
+{% if budget_labels %}
+const budgetCtx = document.getElementById('budgetChart').getContext('2d');
+const budgetChart = new Chart(budgetCtx, {
+    type: 'bar',
+    data: {
+        labels: {{ budget_labels | tojson }},
+        datasets: [{
+            label: 'Budget',
+            data: {{ budget_amounts | tojson }},
+            backgroundColor: 'rgba(75, 192, 192, 0.5)',
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 1
+        }, {
+            label: 'Actual',
+            data: {{ budget_spent | tojson }},
+            backgroundColor: function(context) {
+                const budgetValue = {{ budget_amounts | tojson }}[context.dataIndex];
+                const actualValue = context.parsed.y;
+                if (actualValue > budgetValue) {
+                    return 'rgba(255, 99, 132, 0.5)';  // Red if over budget
+                }
+                return 'rgba(54, 162, 235, 0.5)';  // Blue if under budget
+            },
+            borderColor: function(context) {
+                const budgetValue = {{ budget_amounts | tojson }}[context.dataIndex];
+                const actualValue = context.parsed.y;
+                if (actualValue > budgetValue) {
+                    return 'rgba(255, 99, 132, 1)';
+                }
+                return 'rgba(54, 162, 235, 1)';
+            },
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top',
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return '$' + value;
+                    }
+                }
+            }
+        }
+    }
+});
+{% endif %}
+
+// Add animation to cards on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const cards = document.querySelectorAll('.card');
+    cards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, index * 100);
     });
+});
 </script>
 {% endblock %}

@@ -226,18 +226,47 @@
                         <div class="mb-3">
                             <label for="preferred_currency" class="form-label">Preferred Currency</label>
                             <select class="form-select" id="preferred_currency" name="preferred_currency">
-                                <option value="USD" {% if user.preferred_currency == 'USD' %}selected{% endif %}>🇺🇸 USD - US Dollar</option>
-                                <option value="EUR" {% if user.preferred_currency == 'EUR' %}selected{% endif %}>🇪🇺 EUR - Euro</option>
-                                <option value="GBP" {% if user.preferred_currency == 'GBP' %}selected{% endif %}>🇬🇧 GBP - British Pound</option>
-                                <option value="JPY" {% if user.preferred_currency == 'JPY' %}selected{% endif %}>🇯🇵 JPY - Japanese Yen</option>
-                                <option value="CAD" {% if user.preferred_currency == 'CAD' %}selected{% endif %}>🇨🇦 CAD - Canadian Dollar</option>
-                                <option value="AUD" {% if user.preferred_currency == 'AUD' %}selected{% endif %}>🇦🇺 AUD - Australian Dollar</option>
-                                <option value="CHF" {% if user.preferred_currency == 'CHF' %}selected{% endif %}>🇨🇭 CHF - Swiss Franc</option>
-                                <option value="CNY" {% if user.preferred_currency == 'CNY' %}selected{% endif %}>🇨🇳 CNY - Chinese Yuan</option>
-                                <option value="INR" {% if user.preferred_currency == 'INR' %}selected{% endif %}>🇮🇳 INR - Indian Rupee</option>
-                                <option value="MXN" {% if user.preferred_currency == 'MXN' %}selected{% endif %}>🇲🇽 MXN - Mexican Peso</option>
-                                <option value="BRL" {% if user.preferred_currency == 'BRL' %}selected{% endif %}>🇧🇷 BRL - Brazilian Real</option>
-                            </select>
+                                <option value="USD" {% if user.preferred_currency == 'USD' %}selected{% endif %}>USD - US Dollar</option>
+                                <option value="EUR" {% if user.preferred_currency == 'EUR' %}selected{% endif %}>EUR - Euro</option>
+                                <option value="GBP" {% if user.preferred_currency == 'GBP' %}selected{% endif %}>GBP - British Pound</option>
+                                <option value="JPY" {% if user.preferred_currency == 'JPY' %}selected{% endif %}>JPY - Japanese Yen</option>
+                                <option value="CAD" {% if user.preferred_currency == 'CAD' %}selected{% endif %}>CAD - Canadian Dollar</option>
+                                <option value="AUD" {% if user.preferred_currency == 'AUD' %}selected{% endif %}>AUD - Australian Dollar</option>
+                                <option value="CHF" {% if user.preferred_currency == 'CHF' %}selected{% endif %}>CHF - Swiss Franc</option>
+                                <option value="CNY" {% if user.preferred_currency == 'CNY' %}selected{% endif %}>CNY - Chinese Yuan</option>
+                                <option value="INR" {% if user.preferred_currency == 'INR' %}selected{% endif %}>INR - Indian Rupee</option>
+                                <option value="MXN" {% if user.preferred_currency == 'MXN' %}selected{% endif %}>MXN - Mexican Peso</option>
+                                <option value="BRL" {% if user.preferred_currency == 'BRL' %}selected{% endif %}>BRL - Brazilian Real</option>
+                                <option value="ZAR" {% if user.preferred_currency == 'ZAR' %}selected{% endif %}>ZAR - South African Rand</option>
+                                <option value="KRW" {% if user.preferred_currency == 'KRW' %}selected{% endif %}>KRW - South Korean Won</option>
+                                <option value="SGD" {% if user.preferred_currency == 'SGD' %}selected{% endif %}>SGD - Singapore Dollar</option>
+                                <option value="HKD" {% if user.preferred_currency == 'HKD' %}selected{% endif %}>HKD - Hong Kong Dollar</option>
+                                <option value="NOK" {% if user.preferred_currency == 'NOK' %}selected{% endif %}>NOK - Norwegian Krone</option>
+                                <option value="SEK" {% if user.preferred_currency == 'SEK' %}selected{% endif %}>SEK - Swedish Krona</option>
+                                <option value="DKK" {% if user.preferred_currency == 'DKK' %}selected{% endif %}>DKK - Danish Krone</option>
+                                <option value="PLN" {% if user.preferred_currency == 'PLN' %}selected{% endif %}>PLN - Polish Zloty</option>
+                                <option value="THB" {% if user.preferred_currency == 'THB' %}selected{% endif %}>THB - Thai Baht</option>
+                                <option value="IDR" {% if user.preferred_currency == 'IDR' %}selected{% endif %}>IDR - Indonesian Rupiah</option>
+                                <option value="HUF" {% if user.preferred_currency == 'HUF' %}selected{% endif %}>HUF - Hungarian Forint</option>
+                                <option value="CZK" {% if user.preferred_currency == 'CZK' %}selected{% endif %}>CZK - Czech Koruna</option>
+                                <option value="ILS" {% if user.preferred_currency == 'ILS' %}selected{% endif %}>ILS - Israeli Shekel</option>
+                                <option value="CLP" {% if user.preferred_currency == 'CLP' %}selected{% endif %}>CLP - Chilean Peso</option>
+                                <option value="PHP" {% if user.preferred_currency == 'PHP' %}selected{% endif %}>PHP - Philippine Peso</option>
+                                <option value="AED" {% if user.preferred_currency == 'AED' %}selected{% endif %}>AED - UAE Dirham</option>
+                                <option value="COP" {% if user.preferred_currency == 'COP' %}selected{% endif %}>COP - Colombian Peso</option>
+                                <option value="SAR" {% if user.preferred_currency == 'SAR' %}selected{% endif %}>SAR - Saudi Riyal</option>
+                                <option value="MYR" {% if user.preferred_currency == 'MYR' %}selected{% endif %}>MYR - Malaysian Ringgit</option>
+                                <option value="RON" {% if user.preferred_currency == 'RON' %}selected{% endif %}>RON - Romanian Leu</option>
+                                <option value="NZD" {% if user.preferred_currency == 'NZD' %}selected{% endif %}>NZD - New Zealand Dollar</option>
+                                <option value="ARS" {% if user.preferred_currency == 'ARS' %}selected{% endif %}>ARS - Argentine Peso</option>
+                                <option value="MAD" {% if user.preferred_currency == 'MAD' %}selected{% endif %}>MAD - Moroccan Dirham</option>
+                                <option value="EGP" {% if user.preferred_currency == 'EGP' %}selected{% endif %}>EGP - Egyptian Pound</option>
+                                <option value="TND" {% if user.preferred_currency == 'TND' %}selected{% endif %}>TND - Tunisian Dinar</option>
+                                <option value="NGN" {% if user.preferred_currency == 'NGN' %}selected{% endif %}>NGN - Nigerian Naira</option>
+                                <option value="KES" {% if user.preferred_currency == 'KES' %}selected{% endif %}>KES - Kenyan Shilling</option>
+                                <option value="GHS" {% if user.preferred_currency == 'GHS' %}selected{% endif %}>GHS - Ghanaian Cedi</option>
+                                <option value="UAH" {% if user.preferred_currency == 'UAH' %}selected{% endif %}>UAH - Ukrainian Hryvnia</option>
+                        </select>
                             <small class="text-muted">
                                 All amounts will be displayed in your preferred currency
                             </small>

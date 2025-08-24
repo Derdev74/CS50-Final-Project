@@ -1331,11 +1331,17 @@ def dashboard():
 @app.route("/transactions", methods=["GET"])
 @login_required
 def transactions():
-    """Display all transactions for the user with secure filtering and correct pagination"""
+    """Display all transactions for the user with secure filtering, pagination, and currency conversion"""
     if not validate_session():
         return redirect(url_for('login'))
 
     user_id = session.get('user_id')
+    
+    # Initialize currency service and get user's preferred currency
+    currency_service = CurrencyService(db)
+    user_currency = currency_service.get_user_preferred_currency(user_id)
+    
+    # Pagination parameters
     page = request.args.get('page', 1, type=int)
     per_page = 20
     offset = (page - 1) * per_page
@@ -1348,21 +1354,27 @@ def transactions():
 
         date_from = request.args.get('from', '').strip()
         date_to = request.args.get('to', '').strip()
+        
+        # Validate date formats
         if date_from:
             datetime.strptime(date_from, '%Y-%m-%d')
         if date_to:
             datetime.strptime(date_to, '%Y-%m-%d')
 
+        # Sanitize search parameter
         search = request.args.get('search', '').strip()[:100]
         if search:
+            # Escape special SQL characters
             search = search.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+            
     except ValueError as e:
         flash('Invalid filter parameters.', 'warning')
         return redirect(url_for('transactions'))
 
-    # Build WHERE clause
+    # Build WHERE clause dynamically
     where = ["t.user_id = ?"]
     params = [user_id]
+    
     if category_filter:
         where.append("t.category_id = ?")
         params.append(category_filter)
@@ -1382,8 +1394,13 @@ def transactions():
     count_query = f"SELECT COUNT(*) as count FROM transactions t WHERE {where_clause}"
     total_count = db.execute(count_query, *params)[0]['count']
     total_pages = max((total_count + per_page - 1) // per_page, 1)
+    
+    # Ensure page is within valid range
+    if page > total_pages and total_pages > 0:
+        page = total_pages
+        offset = (page - 1) * per_page
 
-    # Get paginated transactions
+    # Get paginated transactions with category information
     query = f"""
         SELECT t.*, c.name as category_name, c.type as category_type
         FROM transactions t
@@ -1393,28 +1410,101 @@ def transactions():
         LIMIT ? OFFSET ?
     """
     paginated_params = params + [per_page, offset]
-    transactions = db.execute(query, *paginated_params)
+    transactions_list = db.execute(query, *paginated_params)
+    
+    # Convert all transactions to user's preferred currency
+    if transactions_list and user_currency != 'USD':
+        for txn in transactions_list:
+            # Get the transaction's original currency (default to USD if not set)
+            txn_currency = txn.get('currency', 'USD')
+            
+            if txn_currency != user_currency:
+                try:
+                    # Get original amount (if stored) or use current amount
+                    if txn.get('original_amount') is not None:
+                        original_amount = Decimal(str(txn['original_amount']))
+                        original_currency = txn_currency
+                    else:
+                        # For older transactions without original_amount
+                        original_amount = Decimal(str(txn['amount']))
+                        original_currency = 'USD'
+                    
+                    # Convert to user's preferred currency
+                    converted_amount = currency_service.convert_amount(
+                        abs(original_amount),
+                        original_currency,
+                        user_currency
+                    )
+                    
+                    # Preserve sign (income vs expense)
+                    if original_amount < 0:
+                        converted_amount = -converted_amount
+                    
+                    # Store both amounts for display
+                    txn['display_amount'] = float(converted_amount)
+                    txn['display_currency'] = user_currency
+                    txn['original_amount'] = float(original_amount)
+                    txn['original_currency'] = original_currency
+                    
+                    # Get exchange rate for transparency
+                    if txn.get('exchange_rate') is None:
+                        txn['exchange_rate'] = currency_service.fetch_exchange_rate(
+                            original_currency, user_currency
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to convert transaction {txn['id']}: {str(e)}")
+                    # Keep original values if conversion fails
+                    txn['display_amount'] = txn['amount']
+                    txn['display_currency'] = txn_currency
+                    txn['original_currency'] = txn_currency
+                    txn['exchange_rate'] = 1.0
+            else:
+                # No conversion needed
+                txn['display_amount'] = txn['amount']
+                txn['display_currency'] = user_currency
+                txn['original_currency'] = user_currency
+                txn['exchange_rate'] = 1.0
+    else:
+        # USD transactions or no transactions
+        for txn in transactions_list:
+            txn['display_amount'] = txn.get('amount', 0)
+            txn['display_currency'] = txn.get('currency', 'USD')
+            txn['original_currency'] = txn.get('currency', 'USD')
+            txn['exchange_rate'] = 1.0
 
+    # Calculate totals in user's currency
+    total_income = Decimal('0')
+    total_expense = Decimal('0')
+    
+    for txn in transactions_list:
+        amount = Decimal(str(txn['display_amount']))
+        if txn.get('category_type') == 'income' or amount > 0:
+            total_income += abs(amount)
+        elif txn.get('category_type') == 'expense' or amount < 0:
+            total_expense += abs(amount)
+
+    # Get all categories for the filter dropdown
     categories = db.execute("SELECT * FROM categories ORDER BY type, name")
-
-    total_income = sum(Decimal(str(t['amount'])) for t in transactions if t.get('category_type') == 'income')
-    total_expense = sum(abs(Decimal(str(t['amount']))) for t in transactions if t.get('category_type') == 'expense')
+    
+    # Get all supported currencies for the add transaction form
+    supported_currencies = CurrencyService.SUPPORTED_CURRENCIES
 
     return render_template("transactions.html",
-        transactions=transactions,
+        transactions=transactions_list,
         categories=categories,
         total_income=float(total_income),
         total_expense=float(total_expense),
         page=page,
         total_pages=total_pages,
         today_date=datetime.now().strftime('%Y-%m-%d'),
+        user_currency=user_currency,
+        supported_currencies=supported_currencies,
         filters={
             'category': category_filter,
             'date_from': date_from,
             'date_to': date_to,
-            'search': search.replace('\\\\', '\\').replace('\\%', '%').replace('\\_', '_')
+            'search': search.replace('\\\\', '\\').replace('\\%', '%').replace('\\_', '_') if search else ''
         })
-
 @app.route("/transactions/add", methods=["POST"])
 @login_required
 def add_transaction():
@@ -1507,21 +1597,28 @@ def add_transaction():
             flash('Invalid currency selected.', 'error')
             return redirect(url_for('transactions'))
 
-        # If transaction is in different currency, store original and convert for balance
-        if transaction_currency != 'USD':  # Assuming balance is in USD
-            exchange_rate = currency_service.fetch_exchange_rate(transaction_currency, 'USD')
-            usd_amount = float(amount) * exchange_rate
+        original_amount = float(amount)  # Store the original amount as entered
+        if category[0]['type'] == 'expense':
+            original_amount = -abs(original_amount)
         else:
-            usd_amount = float(amount)
+            original_amount = abs(original_amount)
+
+        # Convert to USD for balance calculation
+        if transaction_currency != 'USD':
+            exchange_rate = currency_service.fetch_exchange_rate(transaction_currency, 'USD')
+            usd_amount = original_amount * exchange_rate
+        else:
+            usd_amount = original_amount
             exchange_rate = 1.0
+
         # Begin transaction for atomicity
-        # Modify the INSERT statement to include currency and exchange rate:
+        # Then update the INSERT:
         transaction_id = db.execute("""
             INSERT INTO transactions (user_id, category_id, amount, original_amount, 
                             currency, exchange_rate, description, date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, user_id, category_id, usd_amount, float(amount), 
-        transaction_currency, exchange_rate, description, date_str)
+            """, user_id, category_id, usd_amount, original_amount, 
+            transaction_currency, exchange_rate, description, date_str)
         # Update user's cash balance
         db.execute("""
             UPDATE users 
@@ -2522,11 +2619,11 @@ def profile():
         # Fetch complete user information from the database
         # We need all user fields to display current settings
         user = db.execute("""
-            SELECT id, username, email, email_verified, cash, theme, 
-                   last_login, created_at, updated_at
-            FROM users 
-            WHERE id = ?
-        """, user_id)
+    SELECT id, username, email, email_verified, cash, theme, 
+           last_login, created_at, updated_at, preferred_currency
+    FROM users 
+    WHERE id = ?
+""", user_id)
         
         if not user:
             # This shouldn't happen with proper session management, but we check anyway

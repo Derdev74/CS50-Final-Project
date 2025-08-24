@@ -56,8 +56,18 @@
                     <td>{{ txn.description }}</td>
                     <td>{{ txn.category_name }}</td>
                     <td class="fw-bold {% if txn.amount < 0 %}text-danger{% else %}text-success{% endif %}">
+                        {% if txn.display_currency %}
+                        {{ txn.amount|abs|round(2) }} {{ txn.display_currency }}
+                        {% if txn.original_currency and txn.original_currency != txn.display_currency %}
+                    <br>
+                    <small class="text-muted">
+                        ({{ txn.original_amount|abs|round(2) }} {{ txn.original_currency }})
+                    </small>
+                        {% endif %}
+                        {% else %}
                         ${{ txn.amount|abs|round(2) }}
-                    </td>
+                        {% endif %}
+</td>
                     <td>
                         <a href="{{ url_for('edit_transaction', transaction_id=txn.id) }}" class="btn btn-sm btn-primary">Edit</a>
                         <form class="d-inline delete-transaction-form" method="post" action="{{ url_for('delete_transaction', transaction_id=txn.id) }}">

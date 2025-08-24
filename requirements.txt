@@ -31,3 +31,7 @@ Flask-Mail==0.9.1
 
 # Development tools
 python-dateutil==2.8.2
+
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1

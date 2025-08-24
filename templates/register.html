@@ -145,6 +145,23 @@
             Your data is encrypted and secure. We'll send a verification email to confirm your account.
         </small>
     </div>
+    <!-- Add after the regular register submit button -->
+    {% if config.GOOGLE_CLIENT_ID %}
+    <div class="d-grid gap-2 mt-3">
+        <div class="separator">
+            <div class="line"></div>
+            <div class="or-text">OR</div>
+            <div class="line"></div>
+        </div>
+        
+        <a href="{{ url_for('google_login') }}" class="btn btn-outline-danger">
+            <svg class="me-2" width="20" height="20" viewBox="0 0 24 24">
+                <!-- Same SVG paths as above -->
+            </svg>
+            Sign up with Google
+        </a>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 

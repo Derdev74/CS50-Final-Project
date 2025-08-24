@@ -21,11 +21,12 @@ import urllib.parse
 from services import AuthService, UserService
 from flask_wtf.csrf import generate_csrf
 from decimal import Decimal, InvalidOperation
-
-# --- Robust database initialization from database setup.md ---
 import sqlite3
 import threading
 from pathlib import Path
+from oauth_service import GoogleOAuthService
+from oauthlib.oauth2 import WebApplicationClient
+
 
 class DatabaseInitializer:
     def __init__(self, db_path):
@@ -215,6 +216,9 @@ app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() in [
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
+# After existing app configuration
+app.config['GOOGLE_CLIENT_ID'] = os.environ.get('GOOGLE_CLIENT_ID')
+app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET')
 
 # Initialize database connection (after robust init)
 db = SQL(f"sqlite:///{DATABASE_PATH}")
@@ -3001,6 +3005,277 @@ def delete_account():
         logger.error(f"Error deleting account for user {user_id}: {str(e)}")
         flash('Failed to delete account. Please contact support.', 'error')
         return redirect(url_for('profile'))
+
+# Initialize Google OAuth service
+google_oauth = GoogleOAuthService()
+
+@app.route('/auth/google')
+def google_login():
+    """
+    Initiate Google OAuth login flow.
+    
+    This route redirects the user to Google's authorization server
+    where they can grant permission for our app to access their info.
+    """
+    if not google_oauth.is_configured():
+        flash('Google login is not configured. Please use regular login.', 'warning')
+        return redirect(url_for('login'))
+    
+    # Generate a random state parameter for CSRF protection
+    import secrets
+    state = secrets.token_urlsafe(32)
+    session['oauth_state'] = state
+    
+    # Get the authorization URL
+    redirect_uri = url_for('google_callback', _external=True)
+    authorization_url = google_oauth.get_authorization_url(redirect_uri, state)
+    
+    if not authorization_url:
+        flash('Failed to initiate Google login. Please try again.', 'error')
+        return redirect(url_for('login'))
+    
+    return redirect(authorization_url)
+
+@app.route('/auth/google/callback')
+def google_callback():
+    """
+    Handle the callback from Google OAuth.
+    
+    This route is called by Google after the user authorizes our app.
+    We exchange the authorization code for tokens and get user info.
+    """
+    if not google_oauth.is_configured():
+        flash('Google login is not configured.', 'warning')
+        return redirect(url_for('login'))
+    
+    # Verify state parameter for CSRF protection
+    state = request.args.get('state')
+    if not state or state != session.get('oauth_state'):
+        flash('Invalid authentication state. Please try again.', 'error')
+        return redirect(url_for('login'))
+    
+    # Clear the state from session
+    session.pop('oauth_state', None)
+    
+    # Check for errors from Google
+    error = request.args.get('error')
+    if error:
+        flash(f'Google login failed: {error}', 'error')
+        return redirect(url_for('login'))
+    
+    # Exchange authorization code for tokens
+    authorization_response = request.url
+    redirect_url = url_for('google_callback', _external=True)
+    
+    # Handle HTTP vs HTTPS mismatch in development
+    if authorization_response.startswith('http://') and redirect_url.startswith('https://'):
+        authorization_response = authorization_response.replace('http://', 'https://', 1)
+    elif authorization_response.startswith('https://') and redirect_url.startswith('http://'):
+        authorization_response = authorization_response.replace('https://', 'http://', 1)
+    
+    token_response = google_oauth.get_token(authorization_response, redirect_url)
+    
+    if not token_response:
+        flash('Failed to get authentication token from Google.', 'error')
+        return redirect(url_for('login'))
+    
+    # Get user information from Google
+    google_oauth.client.parse_request_body_response(json.dumps(token_response))
+    userinfo = google_oauth.get_user_info(token_response.get('access_token'))
+    
+    if not userinfo:
+        flash('Failed to get user information from Google.', 'error')
+        return redirect(url_for('login'))
+    
+    # Extract user information
+    google_id = userinfo.get('sub')  # Google's unique user ID
+    email = userinfo.get('email')
+    email_verified = userinfo.get('email_verified', False)
+    name = userinfo.get('name', '')
+    given_name = userinfo.get('given_name', '')
+    
+    if not google_id or not email:
+        flash('Incomplete information received from Google.', 'error')
+        return redirect(url_for('login'))
+    
+    try:
+        # Check if user exists with this Google ID
+        existing_user = db.execute("""
+            SELECT * FROM users 
+            WHERE google_id = ? OR email = ?
+        """, google_id, email)
+        
+        if existing_user:
+            user = existing_user[0]
+            
+            # If user exists with same email but no Google ID, link the account
+            if not user['google_id']:
+                db.execute("""
+                    UPDATE users 
+                    SET google_id = ?, 
+                        oauth_provider = 'google',
+                        email_verified = ?,
+                        last_login = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """, google_id, email_verified, 
+                    datetime.now().isoformat(), 
+                    datetime.now().isoformat(), 
+                    user['id'])
+                
+                log_security_event(user['id'], 'GOOGLE_ACCOUNT_LINKED', 
+                                 f'Email: {email}, Google ID: {google_id}')
+                flash('Google account linked successfully!', 'success')
+            else:
+                # Update last login
+                db.execute("""
+                    UPDATE users 
+                    SET last_login = ?, updated_at = ?
+                    WHERE id = ?
+                """, datetime.now().isoformat(), 
+                    datetime.now().isoformat(), 
+                    user['id'])
+            
+            # Set up session
+            session.clear()
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['login_time'] = datetime.now().isoformat()
+            session['ip_address'] = get_client_ip()
+            session['oauth_provider'] = 'google'
+            
+            log_security_event(user['id'], 'GOOGLE_LOGIN_SUCCESS', 
+                             f'Email: {email}, IP: {get_client_ip()}')
+            
+            flash(f'Welcome back, {user["username"]}!', 'success')
+            return redirect(url_for('dashboard'))
+        
+        else:
+            # Create new account with Google
+            # Generate a unique username from email or name
+            base_username = given_name.lower().replace(' ', '_') if given_name else email.split('@')[0]
+            base_username = re.sub(r'[^a-zA-Z0-9_.-]', '', base_username)[:30]
+            
+            # Ensure username is unique
+            username = base_username
+            counter = 1
+            while True:
+                existing = db.execute("SELECT id FROM users WHERE username = ?", username)
+                if not existing:
+                    break
+                username = f"{base_username}_{counter}"
+                counter += 1
+            
+            # Create user account (no password needed for OAuth users)
+            # Generate a random password hash for security (user won't use it)
+            import secrets
+            random_password = secrets.token_urlsafe(32)
+            password_hash = generate_password_hash(random_password)
+            
+            user_id = db.execute("""
+                INSERT INTO users (
+                    username, email, password_hash, 
+                    email_verified, google_id, oauth_provider,
+                    cash, last_login, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, username, email, password_hash, 
+                email_verified, google_id, 'google',
+                10000.00, datetime.now().isoformat(),
+                datetime.now().isoformat(), datetime.now().isoformat())
+            
+            # Set up session for new user
+            session.clear()
+            session['user_id'] = user_id
+            session['username'] = username
+            session['login_time'] = datetime.now().isoformat()
+            session['ip_address'] = get_client_ip()
+            session['oauth_provider'] = 'google'
+            
+            log_security_event(user_id, 'GOOGLE_REGISTRATION_SUCCESS', 
+                             f'Email: {email}, Username: {username}')
+            
+            flash(f'Welcome to FinTrack, {username}! Your account has been created.', 'success')
+            return redirect(url_for('dashboard'))
+            
+    except Exception as e:
+        logger.error(f"Google OAuth error: {str(e)}")
+        flash('An error occurred during Google login. Please try again.', 'error')
+        return redirect(url_for('login'))
+
+@app.route('/auth/link-google')
+@login_required
+def link_google_account():
+    """
+    Link an existing account with Google OAuth.
+    
+    This allows users who registered with email/password to add
+    Google login as an additional authentication method.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    if not google_oauth.is_configured():
+        flash('Google login is not configured.', 'warning')
+        return redirect(url_for('profile'))
+    
+    user_id = session.get('user_id')
+    
+    # Check if already linked
+    user = db.execute("SELECT google_id FROM users WHERE id = ?", user_id)[0]
+    if user['google_id']:
+        flash('Your account is already linked with Google.', 'info')
+        return redirect(url_for('profile'))
+    
+    # Store user_id in session for callback
+    session['linking_user_id'] = user_id
+    
+    # Redirect to Google OAuth
+    return redirect(url_for('google_login'))
+
+@app.route('/auth/unlink-google', methods=['POST'])
+@login_required
+def unlink_google_account():
+    """
+    Unlink Google OAuth from an existing account.
+    
+    This removes Google login capability but keeps the account active
+    if the user has a password set.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Check if user has a password set (required to unlink)
+        user = db.execute("""
+            SELECT oauth_provider, password_hash 
+            FROM users WHERE id = ?
+        """, user_id)[0]
+        
+        if user['oauth_provider'] == 'google' and not user['password_hash']:
+            flash('Please set a password before unlinking Google account.', 'warning')
+            return redirect(url_for('profile'))
+        
+        # Unlink Google account
+        db.execute("""
+            UPDATE users 
+            SET google_id = NULL, 
+                oauth_provider = NULL,
+                updated_at = ?
+            WHERE id = ?
+        """, datetime.now().isoformat(), user_id)
+        
+        log_security_event(user_id, 'GOOGLE_ACCOUNT_UNLINKED', 
+                         f'User ID: {user_id}')
+        
+        flash('Google account unlinked successfully.', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error unlinking Google account: {str(e)}")
+        flash('Failed to unlink Google account.', 'error')
+    
+    return redirect(url_for('profile'))
 
 # Error handlers
 @app.errorhandler(404)

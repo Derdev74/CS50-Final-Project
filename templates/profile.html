@@ -403,7 +403,39 @@
         </div>
     </div>
 </div>
-
+<!-- Add this after the Last Login field in profile.html -->
+<div class="row mb-3">
+    <div class="col-md-12">
+        <label class="form-label">Connected Accounts</label>
+        <div class="list-group">
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" class="me-2">
+                        <!-- Google logo SVG -->
+                    </svg>
+                    Google Account
+                </div>
+                {% if user.google_id %}
+                    <div>
+                        <span class="badge bg-success me-2">Connected</span>
+                        {% if user.password_hash %}
+                        <form method="post" action="{{ url_for('unlink_google_account') }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Unlink</button>
+                        </form>
+                        {% else %}
+                        <small class="text-muted">Set a password to unlink</small>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <a href="{{ url_for('link_google_account') }}" class="btn btn-sm btn-outline-primary">
+                        Connect
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 <!-- Delete Account Confirmation Modal -->
 <div class="modal fade" id="deleteAccountModal" tabindex="-1">
     <div class="modal-dialog">

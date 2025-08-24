@@ -15,7 +15,7 @@ from cs50 import SQL
 from flask_session import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
-from helpers import apology, login_required
+from helpers import apology, login_required, with_currency_conversion, CurrencyService
 import hashlib
 import urllib.parse
 from services import AuthService, UserService
@@ -320,6 +320,17 @@ def init_db():
     blocked_until TIMESTAMP
     )
     ''')
+    # Currency exchange rates cache table
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS exchange_rates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        base_currency TEXT NOT NULL DEFAULT 'USD',
+        target_currency TEXT NOT NULL,
+        rate NUMERIC NOT NULL,
+        last_updated TIMESTAMP NOT NULL,
+        UNIQUE(base_currency, target_currency)
+        )
+        ''')
     # Indexes for optimization
     db.execute('CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_txn_category ON transactions(category_id)')
@@ -439,6 +450,19 @@ def init_db():
     for name, cat_type in default_categories:
         db.execute('INSERT OR IGNORE INTO categories (name, type) VALUES (?, ?)', 
                   name, cat_type)
+    # Add currency preference to users (if not exists)
+    # Check if column exists first to avoid errors
+    try:
+        db.execute("ALTER TABLE users ADD COLUMN preferred_currency TEXT DEFAULT 'USD'")
+    except:
+        pass  # Column already exists
+
+    # Add original_amount and exchange_rate to transactions for audit trail
+    try:
+        db.execute("ALTER TABLE transactions ADD COLUMN original_amount NUMERIC")
+        db.execute("ALTER TABLE transactions ADD COLUMN exchange_rate NUMERIC DEFAULT 1.0")
+    except:
+        pass  # Columns already exist
 
 # Rate limiting configuration
 RATE_LIMIT_ATTEMPTS = 5
@@ -1044,6 +1068,16 @@ def dashboard():
         user = user[0]
         balance = user["cash"]
         
+        # After fetching user data, add:
+        currency_service = CurrencyService(db)
+        user_currency = currency_service.get_user_preferred_currency(user_id)
+
+        # Convert balance if needed (assuming it's stored in USD)       
+        if user_currency != 'USD':
+            balance_in_user_currency = currency_service.convert_amount(balance, 'USD', user_currency)
+        else:
+            balance_in_user_currency = balance
+
         # Get current date for various calculations
         current_date = datetime.now()
         
@@ -1260,7 +1294,9 @@ def dashboard():
             top_categories=top_categories,
             
             # Current date for display
-            current_date=current_date.strftime('%B %Y')
+            current_date=current_date.strftime('%B %Y'),
+            user_currency=user_currency,
+            balance=float(balance_in_user_currency)
         )
         
     except Exception as e:
@@ -1459,13 +1495,33 @@ def add_transaction():
         else:
             amount = abs(amount)
         
+        # After validating amount and before inserting transaction, add:
+
+        # Get transaction currency (default to user's preferred or USD)
+        currency_service = CurrencyService(db)
+        user_currency = currency_service.get_user_preferred_currency(user_id)
+        transaction_currency = request.form.get('currency', user_currency).upper()
+
+        # Validate currency
+        if not currency_service.validate_currency_code(transaction_currency):
+            flash('Invalid currency selected.', 'error')
+            return redirect(url_for('transactions'))
+
+        # If transaction is in different currency, store original and convert for balance
+        if transaction_currency != 'USD':  # Assuming balance is in USD
+            exchange_rate = currency_service.fetch_exchange_rate(transaction_currency, 'USD')
+            usd_amount = float(amount) * exchange_rate
+        else:
+            usd_amount = float(amount)
+            exchange_rate = 1.0
         # Begin transaction for atomicity
-        # Insert transaction
+        # Modify the INSERT statement to include currency and exchange rate:
         transaction_id = db.execute("""
-            INSERT INTO transactions (user_id, category_id, amount, description, date, currency)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, user_id, category_id, float(amount), description, date_str, 'USD')
-        
+            INSERT INTO transactions (user_id, category_id, amount, original_amount, 
+                            currency, exchange_rate, description, date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, user_id, category_id, usd_amount, float(amount), 
+        transaction_currency, exchange_rate, description, date_str)
         # Update user's cash balance
         db.execute("""
             UPDATE users 
@@ -1616,6 +1672,48 @@ def delete_transaction(transaction_id):
         flash('Failed to delete transaction. Please try again.', 'error')
     
     return redirect(url_for('transactions'))
+
+def convert_transactions_to_user_currency(transactions, user_id):
+    """
+    Convert all transaction amounts to user's preferred currency.
+    
+    Args:
+        transactions: List of transaction records
+        user_id: User ID for getting preferred currency
+        
+    Returns:
+        List of transactions with converted amounts
+    """
+    currency_service = CurrencyService(db)
+    user_currency = currency_service.get_user_preferred_currency(user_id)
+    
+    for txn in transactions:
+        if txn.get('currency') and txn['currency'] != user_currency:
+            # Convert amount to user's preferred currency
+            original_amount = Decimal(str(txn['amount']))
+            converted_amount = currency_service.convert_amount(
+                abs(original_amount),
+                txn['currency'],
+                user_currency
+            )
+            
+            # Preserve sign (income vs expense)
+            if original_amount < 0:
+                converted_amount = -converted_amount
+            
+            # Store both amounts for transparency
+            txn['original_amount'] = float(original_amount)
+            txn['original_currency'] = txn['currency']
+            txn['amount'] = float(converted_amount)
+            txn['display_currency'] = user_currency
+            txn['exchange_rate'] = currency_service.fetch_exchange_rate(
+                txn['currency'], user_currency
+            )
+        else:
+            txn['display_currency'] = txn.get('currency', 'USD')
+            txn['exchange_rate'] = 1.0
+    
+    return transactions
 
 @app.route("/budget", methods=["GET"])
 @login_required
@@ -2399,6 +2497,7 @@ def delete_goal():
         logger.error(f"Error deleting goal: {str(e)}")
         flash("Failed to delete goal.", "error")
     return redirect(url_for("goals"))
+
 @app.route("/profile", methods=["GET"])
 @login_required
 def profile():
@@ -2722,7 +2821,20 @@ def update_preferences():
     theme = request.form.get('theme', 'light')
     if theme not in ['light', 'dark']:
         theme = 'light'  # Default to light if invalid
-    
+    # In update_preferences() route, after theme handling, add:
+
+    # Get currency preference
+    preferred_currency = request.form.get('preferred_currency', 'USD').upper()
+
+    # Initialize currency service   
+    currency_service = CurrencyService(db)
+
+    # Validate and update currency
+    if currency_service.validate_currency_code(preferred_currency):
+        currency_service.update_user_currency(user_id, preferred_currency)
+        session['preferred_currency'] = preferred_currency
+    else:
+        flash('Invalid currency selected.', 'error')
     # Update preferences in database
     try:
         db.execute("""

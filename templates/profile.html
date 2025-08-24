@@ -246,7 +246,27 @@
                 <div class="card-body">
                     <form method="post" action="{{ url_for('update_preferences') }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        
+                        <!-- Add this in the preferences form section -->
+                        <div class="mb-3">
+                        <label for="preferred_currency" class="form-label">Preferred Currency</label>
+                        <select class="form-select" id="preferred_currency" name="preferred_currency">
+                            <option value="USD" {% if user.preferred_currency == 'USD' %}selected{% endif %}>🇺🇸 USD - US Dollar</option>
+                            <option value="EUR" {% if user.preferred_currency == 'EUR' %}selected{% endif %}>🇪🇺 EUR - Euro</option>
+                            <option value="GBP" {% if user.preferred_currency == 'GBP' %}selected{% endif %}>🇬🇧 GBP - British Pound</option>
+                            <option value="JPY" {% if user.preferred_currency == 'JPY' %}selected{% endif %}>🇯🇵 JPY - Japanese Yen</option>
+                            <option value="CAD" {% if user.preferred_currency == 'CAD' %}selected{% endif %}>🇨🇦 CAD - Canadian Dollar</option>
+                            <option value="AUD" {% if user.preferred_currency == 'AUD' %}selected{% endif %}>🇦🇺 AUD - Australian Dollar</option>
+                            <option value="CHF" {% if user.preferred_currency == 'CHF' %}selected{% endif %}>🇨🇭 CHF - Swiss Franc</option>
+                            <option value="CNY" {% if user.preferred_currency == 'CNY' %}selected{% endif %}>🇨🇳 CNY - Chinese Yuan</option>
+                            <option value="INR" {% if user.preferred_currency == 'INR' %}selected{% endif %}>🇮🇳 INR - Indian Rupee</option>
+                            <option value="MXN" {% if user.preferred_currency == 'MXN' %}selected{% endif %}>🇲🇽 MXN - Mexican Peso</option>
+                            <option value="BRL" {% if user.preferred_currency == 'BRL' %}selected{% endif %}>🇧🇷 BRL - Brazilian Real</option>
+                            <!-- Add more currencies as needed -->
+                        </select>
+                        <small class="text-muted">
+                            All amounts will be displayed in your preferred currency
+                        </small>
+                </div>
                         <!-- Theme Selection -->
                         <div class="mb-3">
                             <label for="theme" class="form-label">Theme</label>

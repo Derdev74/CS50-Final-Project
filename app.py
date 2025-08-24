@@ -1697,7 +1697,7 @@ def edit_transaction(transaction_id):
                 new_amount = abs(new_amount)
             
             # Calculate balance adjustment
-            old_amount = Decimal(str(transactions['amount']))
+            old_amount = Decimal(str(transaction['amount']))
             balance_adjustment = new_amount - old_amount
             
             # Update transaction
@@ -2400,7 +2400,7 @@ def add_goal():
 
 @app.route("/goal/<int:goal_id>/update", methods=["POST"])
 @login_required
-def update_goal_progress():
+def update_goal_progress(goal_id):
     """
     Update progress on a savings goal (add or withdraw funds).
     
@@ -2487,7 +2487,7 @@ def update_goal_progress():
 
 @app.route("/goal/<int:goal_id>/edit", methods=["POST"])
 @login_required
-def edit_goal():
+def edit_goal(goal_id):
     """
     Edit goal details (name, target amount, deadline).
     
@@ -2559,44 +2559,31 @@ def edit_goal():
 
 @app.route("/goal/<int:goal_id>/delete", methods=["POST"])
 @login_required
-def delete_goal():
+def delete_goal(goal_id):
     """
-    Delete a savings goal.
+    Delete a savings goal securely.
     
-    Sometimes goals become irrelevant or users want to start fresh.
-    This doesn't affect any transactions, just removes the goal tracking.
+    Goals can be removed without affecting past transactions.
     """
     if not validate_session():
         return redirect(url_for('login'))
-    
+
     user_id = session.get('user_id')
-    
+
     try:
-        # Delete goal if it belongs to user
-        result = db.execute("""
-            DELETE FROM goals 
-            WHERE id = ? AND user_id = ?
-        """, goal_id, user_id)
-        
+        # Delete only if the goal belongs to the logged-in user
+        db.execute(
+            "DELETE FROM goals WHERE id = ? AND user_id = ?",
+            goal_id, user_id
+        )
+
         log_security_event(user_id, 'GOAL_DELETED', f'Goal ID: {goal_id}')
-        flash('Goal deleted successfully.', 'info')
-        
+        flash("Goal deleted successfully.", "info")
+
     except Exception as e:
         logger.error(f"Error deleting goal {goal_id}: {str(e)}")
-        flash('Failed to delete goal.', 'error')
-    
-    return redirect(url_for('goals'))
-    """Delete a goal securely."""
-    if not validate_session():
-        return redirect(url_for('login'))
-    user_id = session.get('user_id')
-    try:
-        db.execute("DELETE FROM goals WHERE id = ? AND user_id = ?", goal_id, user_id)
-        flash("Goal deleted.", "success")
-        log_security_event(user_id, 'GOAL_DELETED', f'Goal ID: {goal_id}')
-    except Exception as e:
-        logger.error(f"Error deleting goal: {str(e)}")
         flash("Failed to delete goal.", "error")
+
     return redirect(url_for("goals"))
 
 @app.route("/profile", methods=["GET"])
@@ -3139,9 +3126,9 @@ def google_callback():
             # Set up session
             session.clear()
             session['user_id'] = user['id']
-            session['username'] = user['username']
+            session['username'] = username
             session['login_time'] = datetime.now().isoformat()
-            session['ip_address'] = get_client_ip()
+            session['ip_address'] = client_ip
             session['oauth_provider'] = 'google'
             
             log_security_event(user['id'], 'GOOGLE_LOGIN_SUCCESS', 

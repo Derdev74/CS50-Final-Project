@@ -65,6 +65,15 @@
                             <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                         </form>
                     </td>
+                    <td>
+                        ${{ txn.amount|abs|round(2) }} {{ txn.display_currency }}
+                        {% if txn.original_currency and txn.original_currency != txn.display_currency %}
+                        <br>
+                        <small class="text-muted">
+                        ({{ txn.original_amount|abs|round(2) }} {{ txn.original_currency }})
+                        </small>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
                 {% if transactions|length == 0 %}

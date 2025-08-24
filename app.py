@@ -22,6 +22,9 @@ from services import AuthService, UserService
 from flask_wtf.csrf import generate_csrf
 from decimal import Decimal, InvalidOperation
 
+# OAuth imports
+from authlib.integrations.flask_client import OAuth
+
 # --- Robust database initialization from database setup.md ---
 import sqlite3
 import threading
@@ -208,6 +211,17 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 app.config['REGISTRATION_ENABLED'] = True
 app.config['PASSWORD_RESET_ENABLED'] = True
 app.config['PASSWORD_RESET_TIMEOUT'] = 15
+
+# OAuth Configuration
+oauth = OAuth(app)
+google = oauth.register(
+    name='google',
+    client_id=os.environ.get('GOOGLE_CLIENT_ID'),
+    client_secret=os.environ.get('GOOGLE_CLIENT_SECRET'),
+    client_kwargs={'scope': 'openid email profile'},
+    server_metadata_url='https://accounts.google.com/.well-known/openid_configuration'
+)
+
 # --- Load mail config from environment ---
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
@@ -1030,6 +1044,68 @@ def logout():
         # Even if there's an error, clear the session for security
         session.clear()
         flash('Logout completed.', 'info')
+        return redirect(url_for('login'))
+
+@app.route('/auth/google')
+def google_login():
+    """Initiate Google OAuth login"""
+    redirect_uri = url_for('google_callback', _external=True)
+    return google.authorize_redirect(redirect_uri)
+
+@app.route('/auth/google/callback')
+def google_callback():
+    """Handle Google OAuth callback"""
+    try:
+        # Get the token and user info from Google
+        token = google.authorize_access_token()
+        user_info = token.get('userinfo')
+        
+        if not user_info:
+            flash('Failed to get user information from Google.', 'error')
+            return redirect(url_for('login'))
+        
+        # Extract user information
+        google_id = user_info.get('sub')
+        email = user_info.get('email')
+        name = user_info.get('name')
+        
+        if not google_id or not email:
+            flash('Incomplete user information from Google.', 'error')
+            return redirect(url_for('login'))
+        
+        # Use AuthService to handle OAuth login
+        success, user, message = auth_service.handle_oauth_login(email, google_id, name)
+        
+        if success:
+            # Set up session
+            session.clear()
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['login_time'] = datetime.now().isoformat()
+            session['ip_address'] = get_client_ip()
+            session.permanent = False  # Google OAuth users get session cookies
+            
+            # Log security event
+            log_security_event(user['id'], 'OAUTH_LOGIN_SUCCESS', f'Google OAuth login for {email}')
+            
+            if message:
+                flash(message, 'success')
+            else:
+                flash('Login successful!', 'success')
+            
+            # Redirect to dashboard or next page
+            next_page = request.args.get('next')
+            if next_page and is_safe_url(next_page):
+                return redirect(next_page)
+            return redirect(url_for('dashboard'))
+        else:
+            log_security_event(None, 'OAUTH_LOGIN_FAILED', f'Google OAuth failed for {email}: {message}')
+            flash(message or 'Authentication failed.', 'error')
+            return redirect(url_for('login'))
+            
+    except Exception as e:
+        logger.error(f"Google OAuth error: {str(e)}")
+        flash('Authentication failed. Please try again.', 'error')
         return redirect(url_for('login'))
 
 @app.route("/dashboard")

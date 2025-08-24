@@ -65,6 +65,37 @@ class UserService:
             datetime.now().isoformat(), user_id
         )
 
+    def get_user_by_google_id(self, google_id):
+        """Get user by Google ID"""
+        return self.db.execute("SELECT * FROM users WHERE google_id = ?", google_id)
+
+    def create_oauth_user(self, email, google_id, username=None):
+        """Create a new user via OAuth"""
+        # If username not provided, generate one from email
+        if not username:
+            username = email.split('@')[0]
+            
+        # Ensure username is unique
+        existing = self.get_user_by_username(username)
+        counter = 1
+        original_username = username
+        while existing:
+            username = f"{original_username}{counter}"
+            existing = self.get_user_by_username(username)
+            counter += 1
+        
+        return self.db.execute("""
+            INSERT INTO users (username, email, google_id, oauth_provider, email_verified, password_hash) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, username, email, google_id, 'google', True, 'oauth_user')
+
+    def link_google_account(self, user_id, google_id):
+        """Link Google account to existing user"""
+        self.db.execute(
+            "UPDATE users SET google_id = ?, oauth_provider = ? WHERE id = ?",
+            google_id, 'google', user_id
+        )
+
 class AuthService:
     """
     Handles authentication logic: login, password validation, rate limiting, session management.
@@ -146,3 +177,39 @@ class AuthService:
     def logout(self):
         """Clear session data"""
         session.clear()
+
+    def handle_oauth_login(self, email, google_id, name=None):
+        """Handle OAuth login - either find existing user or create new one"""
+        # Try to find user by Google ID first
+        users = self.user_service.get_user_by_google_id(google_id)
+        
+        if users:
+            # User exists with this Google ID
+            user = users[0]
+            self.user_service.update_last_login(user['id'])
+            return True, user, None
+        
+        # Try to find user by email
+        users = self.user_service.get_user_by_email(email)
+        
+        if users:
+            # User exists with this email but no Google ID - link accounts
+            user = users[0]
+            self.user_service.link_google_account(user['id'], google_id)
+            self.user_service.update_last_login(user['id'])
+            return True, user, "Google account linked successfully!"
+        
+        # Create new user
+        try:
+            username = name.replace(' ', '_').lower() if name else email.split('@')[0]
+            user_id = self.user_service.create_oauth_user(email, google_id, username)
+            
+            # Get the created user
+            new_user = self.user_service.get_user_by_id(user_id)
+            if new_user:
+                return True, new_user[0], "Account created successfully!"
+            else:
+                return False, None, "Failed to create account."
+                
+        except Exception as e:
+            return False, None, f"Failed to create account: {str(e)}"

@@ -1258,7 +1258,7 @@ def dashboard():
         return render_template("dashboard.html",
             # User data
             user=user,
-            balance=balance,
+            balance=float(balance_in_user_currency),
             
             # Transaction data
             recent_transactions=recent_transactions,
@@ -1295,8 +1295,7 @@ def dashboard():
             
             # Current date for display
             current_date=current_date.strftime('%B %Y'),
-            user_currency=user_currency,
-            balance=float(balance_in_user_currency)
+            user_currency=user_currency
         )
         
     except Exception as e:

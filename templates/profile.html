@@ -5,14 +5,12 @@
 {% block content %}
 <div class="container mt-4">
     <!-- Profile Header -->
-    <!-- This section gives users a quick overview of their account status -->
     <div class="row mb-4">
         <div class="col-md-8">
             <h2>My Profile</h2>
             <p class="text-muted">Manage your account settings and preferences</p>
         </div>
         <div class="col-md-4 text-end">
-            <!-- Account status badges -->
             <div>
                 {% if user.email_verified %}
                     <span class="badge bg-success">
@@ -23,7 +21,6 @@
                         <i class="fas fa-exclamation-triangle"></i> Email Not Verified
                     </span>
                 {% endif %}
-                
                 <span class="badge bg-info">
                     <i class="fas fa-calendar"></i> Member for {{ account_age_days }} days
                 </span>
@@ -34,9 +31,7 @@
     <div class="row">
         <!-- Left Column: Account Information and Settings -->
         <div class="col-md-8">
-            
             <!-- Basic Information Card -->
-            <!-- This is where users can view and edit their basic account details -->
             <div class="card mb-4">
                 <div class="card-header bg-primary text-white">
                     <h5 class="mb-0">
@@ -47,7 +42,6 @@
                     <form method="post" action="{{ url_for('update_profile') }}" id="profileForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="update_type" value="basic_info">
-                        
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label for="username" class="form-label">Username</label>
@@ -68,7 +62,6 @@
                                     Letters, numbers, dots, hyphens, and underscores only
                                 </small>
                             </div>
-                            
                             <div class="col-md-6">
                                 <label for="email" class="form-label">Email Address</label>
                                 <div class="input-group">
@@ -89,12 +82,11 @@
                                 {% endif %}
                             </div>
                         </div>
-                        
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">Account Balance</label>
                                 <div class="input-group">
-                                    <span class="input-group-text">$</span>
+                                    <span class="input-group-text">{{ user.preferred_currency or 'USD' }}</span>
                                     <input type="text" 
                                            class="form-control" 
                                            value="{{ '%.2f'|format(user.cash) }}" 
@@ -104,7 +96,6 @@
                                     Balance is updated through transactions
                                 </small>
                             </div>
-                            
                             <div class="col-md-6">
                                 <label class="form-label">Last Login</label>
                                 <input type="text" 
@@ -113,7 +104,6 @@
                                        readonly>
                             </div>
                         </div>
-                        
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save"></i> Update Information
                         </button>
@@ -122,7 +112,6 @@
             </div>
 
             <!-- Password Change Card -->
-            <!-- Security-critical section for password updates -->
             <div class="card mb-4">
                 <div class="card-header bg-warning text-dark">
                     <h5 class="mb-0">
@@ -132,8 +121,6 @@
                 <div class="card-body">
                     <form method="post" action="{{ url_for('change_password') }}" id="passwordForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        
-                        <!-- Current Password (required for security) -->
                         <div class="mb-3">
                             <label for="current_password" class="form-label">
                                 Current Password <span class="text-danger">*</span>
@@ -154,8 +141,6 @@
                                 </button>
                             </div>
                         </div>
-                        
-                        <!-- New Password -->
                         <div class="mb-3">
                             <label for="new_password" class="form-label">
                                 New Password <span class="text-danger">*</span>
@@ -176,8 +161,6 @@
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </div>
-                            
-                            <!-- Password strength indicator -->
                             <div class="progress mt-2" style="height: 5px;">
                                 <div class="progress-bar" 
                                      id="password-strength-bar" 
@@ -188,8 +171,6 @@
                                 Enter a password to see strength
                             </small>
                         </div>
-                        
-                        <!-- Confirm New Password -->
                         <div class="mb-3">
                             <label for="confirm_password" class="form-label">
                                 Confirm New Password <span class="text-danger">*</span>
@@ -214,8 +195,6 @@
                                 Passwords do not match
                             </div>
                         </div>
-                        
-                        <!-- Password requirements reminder -->
                         <div class="alert alert-info">
                             <small>
                                 <strong>Password Requirements:</strong>
@@ -227,7 +206,6 @@
                                 </ul>
                             </small>
                         </div>
-                        
                         <button type="submit" class="btn btn-warning">
                             <i class="fas fa-key"></i> Change Password
                         </button>
@@ -236,7 +214,6 @@
             </div>
 
             <!-- Preferences Card -->
-            <!-- User experience customization options -->
             <div class="card mb-4">
                 <div class="card-header bg-info text-white">
                     <h5 class="mb-0">
@@ -246,28 +223,25 @@
                 <div class="card-body">
                     <form method="post" action="{{ url_for('update_preferences') }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <!-- Add this in the preferences form section -->
                         <div class="mb-3">
-                        <label for="preferred_currency" class="form-label">Preferred Currency</label>
-                        <select class="form-select" id="preferred_currency" name="preferred_currency">
-                            <option value="USD" {% if user.preferred_currency == 'USD' %}selected{% endif %}>🇺🇸 USD - US Dollar</option>
-                            <option value="EUR" {% if user.preferred_currency == 'EUR' %}selected{% endif %}>🇪🇺 EUR - Euro</option>
-                            <option value="GBP" {% if user.preferred_currency == 'GBP' %}selected{% endif %}>🇬🇧 GBP - British Pound</option>
-                            <option value="JPY" {% if user.preferred_currency == 'JPY' %}selected{% endif %}>🇯🇵 JPY - Japanese Yen</option>
-                            <option value="CAD" {% if user.preferred_currency == 'CAD' %}selected{% endif %}>🇨🇦 CAD - Canadian Dollar</option>
-                            <option value="AUD" {% if user.preferred_currency == 'AUD' %}selected{% endif %}>🇦🇺 AUD - Australian Dollar</option>
-                            <option value="CHF" {% if user.preferred_currency == 'CHF' %}selected{% endif %}>🇨🇭 CHF - Swiss Franc</option>
-                            <option value="CNY" {% if user.preferred_currency == 'CNY' %}selected{% endif %}>🇨🇳 CNY - Chinese Yuan</option>
-                            <option value="INR" {% if user.preferred_currency == 'INR' %}selected{% endif %}>🇮🇳 INR - Indian Rupee</option>
-                            <option value="MXN" {% if user.preferred_currency == 'MXN' %}selected{% endif %}>🇲🇽 MXN - Mexican Peso</option>
-                            <option value="BRL" {% if user.preferred_currency == 'BRL' %}selected{% endif %}>🇧🇷 BRL - Brazilian Real</option>
-                            <!-- Add more currencies as needed -->
-                        </select>
-                        <small class="text-muted">
-                            All amounts will be displayed in your preferred currency
-                        </small>
-                </div>
-                        <!-- Theme Selection -->
+                            <label for="preferred_currency" class="form-label">Preferred Currency</label>
+                            <select class="form-select" id="preferred_currency" name="preferred_currency">
+                                <option value="USD" {% if user.preferred_currency == 'USD' %}selected{% endif %}>🇺🇸 USD - US Dollar</option>
+                                <option value="EUR" {% if user.preferred_currency == 'EUR' %}selected{% endif %}>🇪🇺 EUR - Euro</option>
+                                <option value="GBP" {% if user.preferred_currency == 'GBP' %}selected{% endif %}>🇬🇧 GBP - British Pound</option>
+                                <option value="JPY" {% if user.preferred_currency == 'JPY' %}selected{% endif %}>🇯🇵 JPY - Japanese Yen</option>
+                                <option value="CAD" {% if user.preferred_currency == 'CAD' %}selected{% endif %}>🇨🇦 CAD - Canadian Dollar</option>
+                                <option value="AUD" {% if user.preferred_currency == 'AUD' %}selected{% endif %}>🇦🇺 AUD - Australian Dollar</option>
+                                <option value="CHF" {% if user.preferred_currency == 'CHF' %}selected{% endif %}>🇨🇭 CHF - Swiss Franc</option>
+                                <option value="CNY" {% if user.preferred_currency == 'CNY' %}selected{% endif %}>🇨🇳 CNY - Chinese Yuan</option>
+                                <option value="INR" {% if user.preferred_currency == 'INR' %}selected{% endif %}>🇮🇳 INR - Indian Rupee</option>
+                                <option value="MXN" {% if user.preferred_currency == 'MXN' %}selected{% endif %}>🇲🇽 MXN - Mexican Peso</option>
+                                <option value="BRL" {% if user.preferred_currency == 'BRL' %}selected{% endif %}>🇧🇷 BRL - Brazilian Real</option>
+                            </select>
+                            <small class="text-muted">
+                                All amounts will be displayed in your preferred currency
+                            </small>
+                        </div>
                         <div class="mb-3">
                             <label for="theme" class="form-label">Theme</label>
                             <select class="form-select" id="theme" name="theme">
@@ -282,7 +256,6 @@
                                 Choose your preferred visual theme
                             </small>
                         </div>
-                        
                         <button type="submit" class="btn btn-info text-white">
                             <i class="fas fa-save"></i> Save Preferences
                         </button>
@@ -291,7 +264,6 @@
             </div>
 
             <!-- Danger Zone Card -->
-            <!-- Destructive actions that need extra confirmation -->
             <div class="card border-danger">
                 <div class="card-header bg-danger text-white">
                     <h5 class="mb-0">
@@ -303,8 +275,6 @@
                         <strong>Warning:</strong> This action cannot be undone. 
                         All your data including transactions, budgets, and goals will be permanently deleted.
                     </p>
-                    
-                    <!-- Delete Account Button (triggers modal) -->
                     <button type="button" 
                             class="btn btn-danger" 
                             data-bs-toggle="modal" 
@@ -317,9 +287,7 @@
 
         <!-- Right Column: Statistics and Activity -->
         <div class="col-md-4">
-            
             <!-- Account Statistics Card -->
-            <!-- Shows user their activity summary -->
             <div class="card mb-4">
                 <div class="card-header bg-secondary text-white">
                     <h5 class="mb-0">
@@ -342,13 +310,17 @@
                     <div class="mb-3">
                         <div class="d-flex justify-content-between">
                             <span>Total Income:</span>
-                            <strong class="text-success">${{ '%.2f'|format(total_income) }}</strong>
+                            <strong class="text-success">
+                                {{ user.preferred_currency or 'USD' }} {{ '%.2f'|format(total_income) }}
+                            </strong>
                         </div>
                     </div>
                     <div class="mb-3">
                         <div class="d-flex justify-content-between">
                             <span>Total Expenses:</span>
-                            <strong class="text-danger">${{ '%.2f'|format(total_expenses) }}</strong>
+                            <strong class="text-danger">
+                                {{ user.preferred_currency or 'USD' }} {{ '%.2f'|format(total_expenses) }}
+                            </strong>
                         </div>
                     </div>
                     <hr>
@@ -356,15 +328,13 @@
                         <div class="d-flex justify-content-between">
                             <span>Net Balance:</span>
                             <strong class="{% if total_income - total_expenses >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                ${{ '%.2f'|format(total_income - total_expenses) }}
+                                {{ user.preferred_currency or 'USD' }} {{ '%.2f'|format(total_income - total_expenses) }}
                             </strong>
                         </div>
                     </div>
                 </div>
             </div>
-
             <!-- Recent Security Activity Card -->
-            <!-- Shows recent login and security events -->
             <div class="card">
                 <div class="card-header bg-dark text-white">
                     <h5 class="mb-0">
@@ -406,7 +376,6 @@
 </div>
 
 <!-- Delete Account Confirmation Modal -->
-<!-- Extra security step for account deletion -->
 <div class="modal fade" id="deleteAccountModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -429,7 +398,6 @@
                             <li>Your account information</li>
                         </ul>
                     </div>
-                    
                     <div class="mb-3">
                         <label for="delete_password" class="form-label">
                             Enter your password to confirm:
@@ -440,7 +408,6 @@
                                name="password" 
                                required>
                     </div>
-                    
                     <div class="form-check">
                         <input class="form-check-input" 
                                type="checkbox" 
@@ -464,18 +431,13 @@
     </div>
 </div>
 
-<!-- Include Bootstrap JavaScript for modals -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-
-<!-- Profile page specific JavaScript -->
 <script>
-// Password visibility toggle function
-// This improves user experience when typing passwords
+// Password visibility toggle
 function togglePassword(fieldId) {
     const field = document.getElementById(fieldId);
     const button = event.currentTarget;
     const icon = button.querySelector('i');
-    
     if (field.type === 'password') {
         field.type = 'text';
         icon.classList.remove('fa-eye');
@@ -486,33 +448,21 @@ function togglePassword(fieldId) {
         icon.classList.add('fa-eye');
     }
 }
-
 // Password strength checker
-// Provides real-time feedback on password security
 document.getElementById('new_password').addEventListener('input', function() {
     const password = this.value;
     const strengthBar = document.getElementById('password-strength-bar');
     const strengthText = document.getElementById('password-strength-text');
-    
-    // Calculate password strength score
     let score = 0;
-    
-    // Length checks
     if (password.length >= 8) score++;
     if (password.length >= 12) score++;
     if (password.length >= 16) score++;
-    
-    // Character type checks
     if (/[a-z]/.test(password)) score++;
     if (/[A-Z]/.test(password)) score++;
     if (/[0-9]/.test(password)) score++;
     if (/[^A-Za-z0-9]/.test(password)) score++;
-    
-    // Update visual feedback
     const percentage = (score / 7) * 100;
     strengthBar.style.width = percentage + '%';
-    
-    // Set color and text based on strength
     if (score <= 2) {
         strengthBar.className = 'progress-bar bg-danger';
         strengthText.textContent = 'Weak password';
@@ -530,55 +480,41 @@ document.getElementById('new_password').addEventListener('input', function() {
         strengthText.textContent = 'Strong password';
         strengthText.className = 'text-success';
     }
-    
-    // Clear strength indicator if password is empty
     if (password.length === 0) {
         strengthBar.style.width = '0%';
         strengthText.textContent = 'Enter a password to see strength';
         strengthText.className = 'text-muted';
     }
 });
-
 // Confirm password validation
-// Ensures passwords match before submission
 document.getElementById('confirm_password').addEventListener('input', function() {
     const newPassword = document.getElementById('new_password').value;
     const confirmPassword = this.value;
-    
     if (confirmPassword && newPassword !== confirmPassword) {
         this.classList.add('is-invalid');
     } else {
         this.classList.remove('is-invalid');
     }
 });
-
 // Form validation before submission
-// Prevents common user errors
 document.getElementById('passwordForm').addEventListener('submit', function(e) {
     const newPassword = document.getElementById('new_password').value;
     const confirmPassword = document.getElementById('confirm_password').value;
-    
     if (newPassword !== confirmPassword) {
         e.preventDefault();
         alert('Passwords do not match!');
         return false;
     }
 });
-
 // Profile form validation
-// Ensures username and email meet requirements
 document.getElementById('profileForm').addEventListener('submit', function(e) {
     const username = document.getElementById('username').value.trim();
     const email = document.getElementById('email').value.trim();
-    
-    // Validate username format if changed
     if (username && !/^[a-zA-Z0-9_.-]+$/.test(username)) {
         e.preventDefault();
         alert('Username can only contain letters, numbers, dots, hyphens, and underscores.');
         return false;
     }
-    
-    // Validate email format if changed
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         e.preventDefault();
         alert('Please enter a valid email address.');

@@ -10,7 +10,7 @@ import secrets
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response
 from cs50 import SQL 
 from flask_session import Session
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -26,6 +26,27 @@ import threading
 from pathlib import Path
 from oauth_service import GoogleOAuthService
 from oauthlib.oauth2 import WebApplicationClient
+import csv
+import io
+import logging
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import List, Dict, Any, Optional
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+from export_service import ExportService
+import json
+import sqlite3
+from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseInitializer:
@@ -176,9 +197,6 @@ logger = logging.getLogger(__name__)
 
 
 load_dotenv()
-# --- Robust database initialization (from database setup.md) ---
-import sqlite3
-from pathlib import Path
 
 # Use absolute path for database
 db_dir = Path(__file__).parent / "instance"
@@ -468,6 +486,8 @@ def init_db():
     except:
         pass  # Columns already exist
 
+# Initialize export service after database initialization
+export_service = ExportService(db)
 # Rate limiting configuration
 RATE_LIMIT_ATTEMPTS = 5
 RATE_LIMIT_WINDOW = 300  # 5 minutes
@@ -3263,6 +3283,235 @@ def unlink_google_account():
         flash('Failed to unlink Google account.', 'error')
     
     return redirect(url_for('profile'))
+
+# Export rate limiting
+EXPORT_RATE_LIMIT = 10  # Maximum exports per hour
+export_attempts = {}
+
+def check_export_rate_limit(user_id):
+    """Check if user has exceeded export rate limit."""
+    current_time = time.time()
+    hour_ago = current_time - 3600
+    
+    # Clean old entries
+    if user_id in export_attempts:
+        export_attempts[user_id] = [
+            t for t in export_attempts[user_id] 
+            if t > hour_ago
+        ]
+    else:
+        export_attempts[user_id] = []
+    
+    # Check limit
+    if len(export_attempts[user_id]) >= EXPORT_RATE_LIMIT:
+        raise Exception(f"Export limit exceeded. Maximum {EXPORT_RATE_LIMIT} exports per hour.")
+    
+    # Record attempt
+    export_attempts[user_id].append(current_time)
+
+# Export Routes
+@app.route('/export/transactions/csv')
+@login_required
+def export_transactions_csv():
+    """
+    Export user transactions to CSV file.
+    
+    Security:
+    - Requires authentication
+    - Only exports data for logged-in user
+    - Logs export action for audit
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    # In each export route, add:
+    try:
+        check_export_rate_limit(user_id)
+    except Exception as e:
+        flash(str(e), 'warning')
+        return redirect(request.referrer or url_for('dashboard'))
+    try:
+        # Get filters from request args
+        filters = {
+            'date_from': request.args.get('from'),
+            'date_to': request.args.get('to'),
+            'category_id': request.args.get('category', type=int)
+        }
+        
+        # Generate CSV
+        csv_data = export_service.export_transactions_csv(user_id, filters)
+        
+        # Log export action
+        log_security_event(user_id, 'DATA_EXPORTED', 'Transactions exported to CSV')
+        
+        # Create response
+        response = make_response(csv_data.getvalue())
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = f'attachment; filename=transactions_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error exporting transactions for user {user_id}: {str(e)}")
+        flash('Failed to export transactions. Please try again.', 'error')
+        return redirect(url_for('transactions'))
+
+@app.route('/export/budgets/csv')
+@login_required
+def export_budgets_csv():
+    """
+    Export user budgets to CSV file.
+    
+    Security:
+    - Requires authentication
+    - Only exports data for logged-in user
+    - Logs export action for audit
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # In each export route, add:
+    try:
+        check_export_rate_limit(user_id)
+    except Exception as e:
+        flash(str(e), 'warning')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    try:
+        # Generate CSV
+        csv_data = export_service.export_budgets_csv(user_id)
+        
+        # Log export action
+        log_security_event(user_id, 'DATA_EXPORTED', 'Budgets exported to CSV')
+        
+        # Create response
+        response = make_response(csv_data.getvalue())
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = f'attachment; filename=budgets_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error exporting budgets for user {user_id}: {str(e)}")
+        flash('Failed to export budgets. Please try again.', 'error')
+        return redirect(url_for('budget'))
+
+@app.route('/export/goals/csv')
+@login_required
+def export_goals_csv():
+    """
+    Export user goals to CSV file.
+    
+    Security:
+    - Requires authentication
+    - Only exports data for logged-in user
+    - Logs export action for audit
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # In each export route, add:
+    try:
+        check_export_rate_limit(user_id)
+    except Exception as e:
+        flash(str(e), 'warning')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    try:
+        # Generate CSV
+        csv_data = export_service.export_goals_csv(user_id)
+        
+        # Log export action
+        log_security_event(user_id, 'DATA_EXPORTED', 'Goals exported to CSV')
+        
+        # Create response
+        response = make_response(csv_data.getvalue())
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = f'attachment; filename=goals_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error exporting goals for user {user_id}: {str(e)}")
+        flash('Failed to export goals. Please try again.', 'error')
+        return redirect(url_for('goals'))
+
+@app.route('/export/report/pdf')
+@login_required
+def export_report_pdf():
+    """
+    Generate and download comprehensive PDF report.
+    
+    Security:
+    - Requires authentication
+    - Only includes data for logged-in user
+    - Logs export action for audit
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # In each export route, add:
+    try:
+        check_export_rate_limit(user_id)
+    except Exception as e:
+        flash(str(e), 'warning')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    try:
+        # Get user information
+        user = db.execute("SELECT * FROM users WHERE id = ?", user_id)[0]
+        
+        # Get additional statistics
+        transaction_count = db.execute(
+            "SELECT COUNT(*) as count FROM transactions WHERE user_id = ?", 
+            user_id
+        )[0]['count']
+        
+        budget_count = db.execute(
+            "SELECT COUNT(*) as count FROM budgets WHERE user_id = ?", 
+            user_id
+        )[0]['count']
+        
+        goal_count = db.execute(
+            "SELECT COUNT(*) as count FROM goals WHERE user_id = ?", 
+            user_id
+        )[0]['count']
+        
+        user_info = {
+            'username': user['username'],
+            'email': user['email'],
+            'balance': user['cash'],
+            'created_at': user['created_at'],
+            'transaction_count': transaction_count,
+            'budget_count': budget_count,
+            'goal_count': goal_count
+        }
+        
+        # Generate PDF
+        pdf_data = export_service.export_complete_report_pdf(user_id, user_info)
+        
+        # Log export action
+        log_security_event(user_id, 'DATA_EXPORTED', 'Complete report exported to PDF')
+        
+        # Create response
+        response = make_response(pdf_data.getvalue())
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=fintrack_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error generating PDF report for user {user_id}: {str(e)}")
+        flash('Failed to generate report. Please try again.', 'error')
+        return redirect(url_for('dashboard'))
+
 
 # Error handlers
 @app.errorhandler(404)

@@ -71,6 +71,29 @@
         </div>
     </div>
 
+    <!-- Add this in a prominent location, perhaps after the balance card -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Data Export</h5>
+            <p class="card-text">Download your financial data for backup or analysis.</p>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-primary" onclick="window.location.href='/export/report/pdf'">
+                    <i class="fas fa-file-pdf"></i> Download Full Report (PDF)
+                </button>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                        <i class="fas fa-file-csv"></i> Export CSV
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="/export/transactions/csv">Transactions</a></li>
+                        <li><a class="dropdown-item" href="/export/budgets/csv">Budgets</a></li>
+                        <li><a class="dropdown-item" href="/export/goals/csv">Goals</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Charts Row -->
     <div class="row mb-4">
         <!-- Spending by Category Pie Chart -->

@@ -67,7 +67,7 @@
                         {% else %}
                         ${{ txn.amount|abs|round(2) }}
                         {% endif %}
-</td>
+                    </td>
                     <td>
                         <a href="{{ url_for('edit_transaction', transaction_id=txn.id) }}" class="btn btn-sm btn-primary">Edit</a>
                         <form class="d-inline delete-transaction-form" method="post" action="{{ url_for('delete_transaction', transaction_id=txn.id) }}">
@@ -129,10 +129,42 @@
                     <select id="add-currency" name="currency" class="form-select">
                         <option value="{{ user_currency }}" selected>{{ user_currency }}</option>
                         <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
+                        <option value="EUR" >EUR</option>
                         <option value="GBP">GBP</option>
                         <option value="JPY">JPY</option>
                         <option value="CAD">CAD</option>
+                        <option value="AUD">AUD</option>
+                        <option value="CHF">CHF</option>
+                        <option value="CNY">CNY</option>
+                        <option value="INR">INR</option>
+                        <option value="MXN">MXN</option>
+                        <option value="BRL">BRL</option>
+                        <option value="ZAR">ZAR</option>
+                        <option value="KRW">KRW</option>
+                        <option value="SGD">SGD</option>
+                        <option value="HKD">HKD</option>
+                        <option value="NOK">NOK</option>
+                        <option value="SEK">SEK</option>                                <option value="DKK">DKK</option>
+                        <option value="PLN">PLN</option>
+                        <option value="THB">THB</option>
+                        <option value="IDR">IDR</option>
+                        <option value="HUF">HUF</option>
+                        <option value="CZK">CZK</option>
+                        <option value="CLP">CLP</option>                        <option value="PHP">PHP</option>
+                        <option value="AED">AED</option>
+                        <option value="COP">COP</option>
+                        <option value="SAR">SAR</option>
+                        <option value="MYR">MYR</option>
+                        <option value="RON">RON</option>
+                        <option value="NZD">NZD</option>
+                        <option value="ARS">ARS</option>
+                        <option value="MAD">MAD</option>
+                        <option value="EGP">EGP</option>
+                        <option value="TND">TND</option>
+                        <option value="NGN">NGN</option>
+                        <option value="KES">KES</option>
+                        <option value="GHS">GHS</option>
+                        <option value="UAH">UAH</option>
                     <!-- Add more as needed -->
                     </select>
                 </div>      
@@ -158,4 +190,16 @@
 </div>
 <!-- Reference main.js for AJAX and UI logic -->
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<!-- Add this JavaScript at the bottom of the template -->
+<script>
+function exportTransactions(format) {
+    const filters = new URLSearchParams(window.location.search);
+    
+    if (format === 'csv') {
+        window.location.href = `/export/transactions/csv?${filters.toString()}`;
+    } else if (format === 'pdf') {
+        window.location.href = '/export/report/pdf';
+    }
+}
+</script>
 {% endblock %}

@@ -1080,7 +1080,6 @@ def dashboard():
         return render_template("dashboard.html",
             # User data
             user=user,
-            balance=balance,
             
             # Transaction data
             recent_transactions=recent_transactions,

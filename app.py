@@ -21,168 +21,14 @@ import urllib.parse
 from services import AuthService, UserService
 from flask_wtf.csrf import generate_csrf
 from decimal import Decimal, InvalidOperation
-import sqlite3
-import threading
 from pathlib import Path
 from oauth_service import GoogleOAuthService
 from oauthlib.oauth2 import WebApplicationClient
-import csv
-import io
-import logging
-from datetime import datetime, timedelta
-from decimal import Decimal
-from typing import List, Dict, Any, Optional
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
-from reportlab.pdfgen import canvas
-from reportlab.lib.utils import ImageReader
 from export_service import ExportService
 import json
-import sqlite3
-from pathlib import Path
 
-
-logger = logging.getLogger(__name__)
-
-
-class DatabaseInitializer:
-    def __init__(self, db_path):
-        self.db_path = Path(db_path).resolve()
-        self._init_lock = threading.Lock()
-        self._initialized = False
-    def initialize_database(self):
-        if self._initialized:
-            return
-        with self._init_lock:
-            if self._initialized:
-                return
-            self._ensure_database_file_exists()
-            self._create_schema()
-            self._initialized = True
-    def _ensure_database_file_exists(self):
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        if not self.db_path.exists():
-            conn = sqlite3.connect(str(self.db_path))
-            conn.close()
-    def _create_schema(self):
-        conn = sqlite3.connect(str(self.db_path))
-        try:
-            with conn:
-                # Users table
-                conn.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    email_verified BOOLEAN DEFAULT FALSE,
-    email_verification_token TEXT,
-    email_verification_expires TIMESTAMP,
-    password_reset_token TEXT,
-    password_reset_expires TIMESTAMP,
-    google_id TEXT,
-    oauth_provider TEXT,
-    cash NUMERIC NOT NULL DEFAULT 10000.00,
-    theme TEXT DEFAULT 'light',
-    failed_login_attempts INTEGER DEFAULT 0,
-    locked_until TIMESTAMP NULL,
-    last_login TIMESTAMP NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-                ''')
-                # Categories table
-                conn.execute('''
-CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    type TEXT CHECK(type IN ('income', 'expense')) NOT NULL
-)
-                ''')
-                # Transactions table
-                conn.execute('''
-CREATE TABLE IF NOT EXISTS transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    category_id INTEGER,
-    amount NUMERIC NOT NULL,
-    currency TEXT DEFAULT 'USD',
-    description TEXT,
-    date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-)
-                ''')
-                # Budgets table
-                conn.execute('''
-CREATE TABLE IF NOT EXISTS budgets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    category_id INTEGER,
-    amount NUMERIC NOT NULL,
-    period TEXT CHECK(period IN ('weekly', 'monthly', 'yearly')) NOT NULL,
-    start_date DATE NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (category_id) REFERENCES categories(id)
-)
-                ''')
-                # Goals table
-                conn.execute('''
-CREATE TABLE IF NOT EXISTS goals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    target_amount NUMERIC NOT NULL,
-    current_amount NUMERIC DEFAULT 0,
-    deadline DATE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-)
-                ''')
-                # Security audit log table
-                conn.execute('''
-    CREATE TABLE IF NOT EXISTS security_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    event_type TEXT NOT NULL,
-    ip_address TEXT,
-    user_agent TEXT,
-    details TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-                ''')
-                # Email verification attempts table
-                conn.execute('''
-    CREATE TABLE IF NOT EXISTS email_verification_attempts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT NOT NULL,
-    ip_address TEXT,
-    attempts INTEGER DEFAULT 1,
-    last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    blocked_until TIMESTAMP
-)
-                ''')
-                # Indexes for optimization
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC)')
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_txn_category ON transactions(category_id)')
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, timestamp)')
-        finally:
-            conn.close()
-
-def get_database_path():
-    if os.environ.get('FLASK_ENV') == 'production':
-        return Path('/var/data/fintrack/fintrack.db')
-    else:
-        return Path(__file__).parent / 'instance' / 'fintrack.db'
-
-DATABASE_PATH = get_database_path()
-initializer = DatabaseInitializer(DATABASE_PATH)
-initializer.initialize_database()
-# --- End robust database initialization ---
+# Load environment variables
+load_dotenv()
 
 # Configure logging for security events
 logging.basicConfig(
@@ -195,297 +41,249 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-load_dotenv()
-
-# Use absolute path for database
-db_dir = Path(__file__).parent / "instance"
-db_dir.mkdir(parents=True, exist_ok=True)
-db_path = db_dir / "fintrack.db"
-
-# Create database file and schema if needed
-if not db_path.exists():
-    conn = sqlite3.connect(str(db_path))
-    with conn:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        # Add other tables as needed, e.g. transactions, categories, etc.
-    conn.close()
-# --- End robust database initialization ---
-
-
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 app.config['REGISTRATION_ENABLED'] = True
 app.config['PASSWORD_RESET_ENABLED'] = True
 app.config['PASSWORD_RESET_TIMEOUT'] = 15
-# --- Load mail config from environment ---
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)  # Add this if missing
+
+# Load mail config from environment
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER')
 app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() in ['true', '1', 'yes']
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
-# After existing app configuration
+
+# Google OAuth configuration
 app.config['GOOGLE_CLIENT_ID'] = os.environ.get('GOOGLE_CLIENT_ID')
 app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-# Initialize database connection (after robust init)
+# Configure Flask-Session
+app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_TYPE"] = "filesystem"
+Session(app)
+
+# Determine database path based on environment
+def get_database_path():
+    """Get the appropriate database path based on environment."""
+    if os.environ.get('FLASK_ENV') == 'production':
+        db_path = Path('/var/data/fintrack')
+        db_path.mkdir(parents=True, exist_ok=True)
+        return db_path / 'fintrack.db'
+    else:
+        db_path = Path(__file__).parent / 'instance'
+        db_path.mkdir(parents=True, exist_ok=True)
+        return db_path / 'fintrack.db'
+
+# Initialize database connection using CS50's SQL
+DATABASE_PATH = get_database_path()
 db = SQL(f"sqlite:///{DATABASE_PATH}")
 
-# Instantiate service classes with required dependencies
+# Initialize service classes
 user_service = UserService(db)
 auth_service = AuthService(user_service)
+export_service = ExportService(db)
+google_oauth = GoogleOAuthService()
 
-# Enhanced Flask session configuration for production
 def init_db():
-    """Initialize the database with necessary tables"""
-    # Users table
-    db.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    email_verified BOOLEAN DEFAULT FALSE,
-    email_verification_token TEXT,
-    email_verification_expires TIMESTAMP,
-    password_reset_token TEXT,
-    password_reset_expires TIMESTAMP,
-    google_id TEXT,
-    oauth_provider TEXT,
-    cash NUMERIC NOT NULL DEFAULT 10000.00,
-    theme TEXT DEFAULT 'light',
-    failed_login_attempts INTEGER DEFAULT 0,
-    locked_until TIMESTAMP NULL,
-    last_login TIMESTAMP NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    ''')
-    # Categories table
-    db.execute('''
-    CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    type TEXT CHECK(type IN ('income', 'expense')) NOT NULL
-    )
-    ''')
-    # Transactions table
-    db.execute('''
-    CREATE TABLE IF NOT EXISTS transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    category_id INTEGER,
-    amount NUMERIC NOT NULL,
-    currency TEXT DEFAULT 'USD',
-    description TEXT,
-    date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-    )
-    ''')
-    # Budgets table
-    db.execute('''
-    CREATE TABLE IF NOT EXISTS budgets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    category_id INTEGER,
-    amount NUMERIC NOT NULL,
-    period TEXT CHECK(period IN ('weekly', 'monthly', 'yearly')) NOT NULL,
-    start_date DATE NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (category_id) REFERENCES categories(id)
-    )
-    ''')
-    # Goals table
-    db.execute('''
-    CREATE TABLE IF NOT EXISTS goals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    target_amount NUMERIC NOT NULL,
-    current_amount NUMERIC DEFAULT 0,
-    deadline DATE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-    ''')
-    # Security audit log table
-    db.execute('''
-    CREATE TABLE IF NOT EXISTS security_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    event_type TEXT NOT NULL,
-    ip_address TEXT,
-    user_agent TEXT,
-    details TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-    ''')
-    # Email verification attempts table
-    db.execute('''
-    CREATE TABLE IF NOT EXISTS email_verification_attempts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT NOT NULL,
-    ip_address TEXT,
-    attempts INTEGER DEFAULT 1,
-    last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    blocked_until TIMESTAMP
-    )
-    ''')
-    # Currency exchange rates cache table
-    db.execute('''
-        CREATE TABLE IF NOT EXISTS exchange_rates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        base_currency TEXT NOT NULL DEFAULT 'USD',
-        target_currency TEXT NOT NULL,
-        rate NUMERIC NOT NULL,
-        last_updated TIMESTAMP NOT NULL,
-        UNIQUE(base_currency, target_currency)
-        )
+    """
+    Initialize the database with all necessary tables and default data.
+    This is the ONLY database initialization function.
+    """
+    try:
+        # Users table
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                email_verified BOOLEAN DEFAULT FALSE,
+                email_verification_token TEXT,
+                email_verification_expires TIMESTAMP,
+                password_reset_token TEXT,
+                password_reset_expires TIMESTAMP,
+                google_id TEXT,
+                oauth_provider TEXT,
+                cash NUMERIC NOT NULL DEFAULT 10000.00,
+                theme TEXT DEFAULT 'light',
+                preferred_currency TEXT DEFAULT 'USD',
+                failed_login_attempts INTEGER DEFAULT 0,
+                locked_until TIMESTAMP NULL,
+                last_login TIMESTAMP NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
         ''')
-    # Indexes for optimization
-    db.execute('CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC)')
-    db.execute('CREATE INDEX IF NOT EXISTS idx_txn_category ON transactions(category_id)')
-    db.execute('CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, timestamp)')
-    # Insert default categories
-    default_categories = [
-        ('Food & Dining', 'expense'),
-        ('Transportation', 'expense'),
-        ('Shopping', 'expense'),
-        ('Entertainment', 'expense'),
-        ('Bills & Utilities', 'expense'),
-        ('Healthcare', 'expense'),
-        ('Salary', 'income'),
-        ('Freelance', 'income'),
-        ('Investments', 'income'),
-        ('Other Income', 'income')
-    ]
-    for name, cat_type in default_categories:
-        db.execute('INSERT OR IGNORE INTO categories (name, type) VALUES (?, ?)', name, cat_type)
-    
-    # Categories table
-    db.execute('''
+        
+        # Categories table
+        db.execute('''
             CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            type TEXT CHECK(type IN ('income', 'expense')) NOT NULL
-            )   
-            ''')
-    
-    # Transactions table
-    db.execute('''
-            CREATE TABLE IF NOT EXISTS transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            category_id INTEGER,
-            amount NUMERIC NOT NULL,
-            currency TEXT DEFAULT 'USD',
-            description TEXT,
-            date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                type TEXT CHECK(type IN ('income', 'expense')) NOT NULL
             )
-            ''')
-    
-    # Budgets table
-    db.execute('''
-            CREATE TABLE IF NOT EXISTS budgets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            category_id INTEGER,
-            amount NUMERIC NOT NULL,
-            period TEXT CHECK(period IN ('weekly', 'monthly', 'yearly')) NOT NULL,
-            start_date DATE NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (category_id) REFERENCES categories(id)
-            )
-            ''')
-    
-    # Goals table
-    db.execute('''
-            CREATE TABLE IF NOT EXISTS goals (
+        ''')
+        # User-defined categories table
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS user_categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             name TEXT NOT NULL,
-            target_amount NUMERIC NOT NULL,
-            current_amount NUMERIC DEFAULT 0,
-            deadline DATE,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            type TEXT CHECK(type IN ('income', 'expense')) NOT NULL,
+            icon TEXT,
+            color TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(user_id, name)
             )
             ''')
-    
-    # Security audit log table
-    db.execute('''
+        # Transactions table with all columns including currency support
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                category_id INTEGER,
+                amount NUMERIC NOT NULL,
+                original_amount NUMERIC,
+                currency TEXT DEFAULT 'USD',
+                exchange_rate NUMERIC DEFAULT 1.0,
+                description TEXT,
+                date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+            )
+        ''')
+        
+        # Budgets table
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS budgets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                category_id INTEGER,
+                amount NUMERIC NOT NULL,
+                period TEXT CHECK(period IN ('weekly', 'monthly', 'yearly')) NOT NULL,
+                start_date DATE NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (category_id) REFERENCES categories(id)
+            )
+        ''')
+        
+        # Goals table
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                target_amount NUMERIC NOT NULL,
+                current_amount NUMERIC DEFAULT 0,
+                deadline DATE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Security audit log table
+        db.execute('''
             CREATE TABLE IF NOT EXISTS security_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            event_type TEXT NOT NULL,
-            ip_address TEXT,
-            user_agent TEXT,
-            details TEXT,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                event_type TEXT NOT NULL,
+                ip_address TEXT,
+                user_agent TEXT,
+                details TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
             )
-            ''')
-    
-    # Email verification attempts table
-    db.execute('''
+        ''')
+        
+        # Email verification attempts table
+        db.execute('''
             CREATE TABLE IF NOT EXISTS email_verification_attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL,
-            ip_address TEXT,
-            attempts INTEGER DEFAULT 1,
-            last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            blocked_until TIMESTAMP
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                ip_address TEXT,
+                attempts INTEGER DEFAULT 1,
+                last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                blocked_until TIMESTAMP
             )
-            ''')
-    
-    # Indexes for optimization
-    db.execute('CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC)')
-    db.execute('CREATE INDEX IF NOT EXISTS idx_txn_category ON transactions(category_id)')
-    db.execute('CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, timestamp)')
-    
-    # Insert default categories
-    default_categories = [
-        ('Food & Dining', 'expense'),
-        ('Transportation', 'expense'),
-        ('Shopping', 'expense'),
-        ('Entertainment', 'expense'),
-        ('Bills & Utilities', 'expense'),
-        ('Healthcare', 'expense'),
-        ('Salary', 'income'),
-        ('Freelance', 'income'),
-        ('Investments', 'income'),
-        ('Other Income', 'income')
-    ]
-    
-    for name, cat_type in default_categories:
-        db.execute('INSERT OR IGNORE INTO categories (name, type) VALUES (?, ?)', 
-                  name, cat_type)
-    # Add currency preference to users (if not exists)
-    # Check if column exists first to avoid errors
-    try:
-        db.execute("ALTER TABLE users ADD COLUMN preferred_currency TEXT DEFAULT 'USD'")
-    except:
-        pass  # Column already exists
+        ''')
+        
+        # Currency exchange rates cache table
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS exchange_rates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                base_currency TEXT NOT NULL DEFAULT 'USD',
+                target_currency TEXT NOT NULL,
+                rate NUMERIC NOT NULL,
+                last_updated TIMESTAMP NOT NULL,
+                UNIQUE(base_currency, target_currency)
+            )
+        ''')
+        
+        # Create indexes for optimization
+        db.execute('CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_txn_category ON transactions(category_id)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, timestamp)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_user_categories ON user_categories(user_id, type)')
+        
+        # Insert default categories if they don't exist
+        default_categories = [
+            ('Food & Dining', 'expense'),
+            ('Transportation', 'expense'),
+            ('Shopping', 'expense'),
+            ('Entertainment', 'expense'),
+            ('Bills & Utilities', 'expense'),
+            ('Healthcare', 'expense'),
+            ('Education', 'expense'),
+            ('Personal Care', 'expense'),
+            ('Gifts & Donations', 'expense'),
+            ('Salary', 'income'),
+            ('Freelance', 'income'),
+            ('Investments', 'income'),
+            ('Business', 'income'),
+            ('Other Income', 'income'),
+            ('Other Expense', 'expense')
+        ]
+        
+        for name, cat_type in default_categories:
+            db.execute('INSERT OR IGNORE INTO categories (name, type) VALUES (?, ?)', name, cat_type)
+        
+        logger.info("Database initialized successfully")
+        # Add these columns to existing goals table
+        try:
+            db.execute("ALTER TABLE goals ADD COLUMN goal_type TEXT DEFAULT 'savings'")
+            db.execute("ALTER TABLE goals ADD COLUMN notes TEXT")
+            db.execute("ALTER TABLE goals ADD COLUMN color TEXT DEFAULT '#4CAF50'")
+            db.execute("ALTER TABLE goals ADD COLUMN is_recurring BOOLEAN DEFAULT FALSE")
+        except:
+            pass  # Columns already exist
+        
+    except Exception as e:
+        logger.error(f"Error initializing database: {str(e)}")
+        raise
 
-    # Add original_amount and exchange_rate to transactions for audit trail
-    try:
-        db.execute("ALTER TABLE transactions ADD COLUMN original_amount NUMERIC")
-        db.execute("ALTER TABLE transactions ADD COLUMN exchange_rate NUMERIC DEFAULT 1.0")
-    except:
-        pass  # Columns already exist
+# Initialize the database when the module loads
+init_db()
 
+# Rate limiting configuration
+RATE_LIMIT_ATTEMPTS = 5
+RATE_LIMIT_WINDOW = 300  # 5 minutes
+ACCOUNT_LOCKOUT_ATTEMPTS = 10  # Lock account after 10 failed attempts
+ACCOUNT_LOCKOUT_DURATION = 1800  # 30 minutes
+login_attempts = {}
+
+# Export rate limiting
+EXPORT_RATE_LIMIT = 10  # Maximum exports per hour
+export_attempts = {}
+
+# [Continue with the rest of your Flask forms, helper functions, and routes...]
 # Initialize export service after database initialization
 export_service = ExportService(db)
 # Rate limiting configuration
@@ -1510,6 +1308,14 @@ def transactions():
     # Get all categories for the filter dropdown
     categories = db.execute("SELECT * FROM categories ORDER BY type, name")
     
+    # Add this after loading global categories in transactions() route:
+    # Get user-defined categories
+    user_categories = db.execute("""
+    SELECT id, name, type, color, icon 
+    FROM user_categories 
+    WHERE user_id = ? AND is_active = TRUE
+    ORDER BY type, name
+""", user_id)
     # Get all supported currencies for the add transaction form
     supported_currencies = CurrencyService.SUPPORTED_CURRENCIES
 
@@ -1523,6 +1329,7 @@ def transactions():
         today_date=datetime.now().strftime('%Y-%m-%d'),
         user_currency=user_currency,
         supported_currencies=supported_currencies,
+        user_categories=user_categories,
         filters={
             'category': category_filter,
             'date_from': date_from,
@@ -2304,16 +2111,7 @@ def goals():
 @login_required
 def add_goal():
     """
-    Add a new savings goal with comprehensive validation.
-    
-    Security considerations:
-    - Input validation prevents unrealistic or malicious values
-    - Decimal type ensures precise financial calculations
-    - CSRF protection through form tokens
-    - SQL injection prevention through parameterized queries
-    
-    The validation logic ensures goals are achievable and realistic,
-    preventing user frustration from impossible targets.
+    Add a new savings goal with enhanced customization.
     """
     if not validate_session():
         return redirect(url_for('login'))
@@ -2321,14 +2119,12 @@ def add_goal():
     user_id = session.get('user_id')
     
     # Validate goal name
-    # Names help users emotionally connect with their goals
-    goal_name = request.form.get('name', '').strip()[:100]  # Limit length
+    goal_name = request.form.get('name', '').strip()[:100]
     if not goal_name:
         flash('Goal name is required.', 'error')
         return redirect(url_for('goals'))
     
-    # Validate target amount using Decimal for precision
-    # Financial calculations must be exact, not approximate
+    # Validate target amount
     target_amount_str = request.form.get('target_amount', '').strip()
     if not target_amount_str:
         flash('Target amount is required.', 'error')
@@ -2336,85 +2132,70 @@ def add_goal():
     
     try:
         target_amount = Decimal(target_amount_str)
-        
-        # Validate reasonable amounts
-        # Too small = not worth tracking, too large = likely an error
-        if target_amount <= 0:
-            flash('Target amount must be positive.', 'error')
+        if target_amount <= 0 or target_amount > Decimal('9999999.99'):
+            flash('Invalid target amount.', 'error')
             return redirect(url_for('goals'))
-        
-        if target_amount < Decimal('1'):
-            flash('Target amount must be at least $1.', 'error')
-            return redirect(url_for('goals'))
-            
-        if target_amount > Decimal('9999999.99'):
-            flash('Target amount is too large. Please set a realistic goal.', 'error')
-            return redirect(url_for('goals'))
-            
     except (InvalidOperation, ValueError):
         flash('Invalid target amount format.', 'error')
         return redirect(url_for('goals'))
     
-    # Validate initial amount (optional)
-    # Users might already have some savings toward this goal
+    # Validate initial amount
     initial_amount_str = request.form.get('initial_amount', '').strip()
+    initial_amount = Decimal('0')
     if initial_amount_str:
         try:
             initial_amount = Decimal(initial_amount_str)
-            
-            if initial_amount < 0:
-                flash('Initial amount cannot be negative.', 'error')
+            if initial_amount < 0 or initial_amount > target_amount:
+                flash('Invalid initial amount.', 'error')
                 return redirect(url_for('goals'))
-                
-            if initial_amount > target_amount:
-                flash('Initial amount cannot exceed target amount.', 'error')
-                return redirect(url_for('goals'))
-                
         except (InvalidOperation, ValueError):
             initial_amount = Decimal('0')
-    else:
-        initial_amount = Decimal('0')
     
-    # Validate deadline (optional but recommended)
-    # Deadlines create urgency and help calculate required savings rate
+    # Validate deadline
     deadline_str = request.form.get('deadline', '').strip()
     if deadline_str:
         try:
             deadline = datetime.strptime(deadline_str, '%Y-%m-%d').date()
-            
-            # Deadline must be in the future
             if deadline <= datetime.now().date():
                 flash('Deadline must be in the future.', 'error')
                 return redirect(url_for('goals'))
-            
-            # Prevent unrealistic deadlines (too far in future)
-            # 20 years is reasonable for long-term goals like retirement
-            if deadline > datetime.now().date() + timedelta(days=365*20):
-                flash('Deadline cannot be more than 20 years in the future.', 'error')
-                return redirect(url_for('goals'))
-                
         except ValueError:
-            flash('Invalid date format.', 'error')
-            return redirect(url_for('goals'))
+            deadline_str = None
     else:
-        deadline_str = None  # NULL in database for no deadline
+        deadline_str = None
+    
+    # New fields
+    goal_type = request.form.get('goal_type', 'savings').strip()
+    if goal_type not in ['savings', 'debt', 'investment', 'purchase', 'emergency', 'other']:
+        goal_type = 'savings'
+    
+    notes = request.form.get('notes', '').strip()[:500]
+    color = request.form.get('color', '#4CAF50').strip()
+    is_recurring = request.form.get('is_recurring') == 'true'
+    
+    # Validate color
+    if not re.match(r'^#[0-9A-Fa-f]{6}$', color):
+        color = '#4CAF50'
     
     try:
-        # Insert the new goal
+        # Insert the new goal with enhanced fields
         goal_id = db.execute("""
-            INSERT INTO goals (user_id, name, target_amount, current_amount, deadline)
-            VALUES (?, ?, ?, ?, ?)
-        """, user_id, goal_name, float(target_amount), float(initial_amount), deadline_str)
+            INSERT INTO goals (
+                user_id, name, target_amount, current_amount, 
+                deadline, goal_type, notes, color, is_recurring
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, user_id, goal_name, float(target_amount), float(initial_amount), 
+            deadline_str, goal_type, notes, color, is_recurring)
         
-        # Log the goal creation for analytics
         log_security_event(user_id, 'GOAL_CREATED', 
-                         f'Goal: {goal_name}, Target: ${target_amount}, ID: {goal_id}')
+                         f'Goal: {goal_name}, Type: {goal_type}, Target: ${target_amount}')
         
-        flash(f'Goal "{goal_name}" created successfully! Start saving to reach your target.', 'success')
+        flash(f'Goal "{goal_name}" created successfully!', 'success')
         
     except Exception as e:
-        logger.error(f"Error creating goal for user {user_id}: {str(e)}")
-        flash('Failed to create goal. Please try again.', 'error')
+        logger.error(f"Error creating goal: {str(e)}")
+        flash('Failed to create goal.', 'error')
     
     return redirect(url_for('goals'))
 
@@ -3284,10 +3065,6 @@ def unlink_google_account():
     
     return redirect(url_for('profile'))
 
-# Export rate limiting
-EXPORT_RATE_LIMIT = 10  # Maximum exports per hour
-export_attempts = {}
-
 def check_export_rate_limit(user_id):
     """Check if user has exceeded export rate limit."""
     current_time = time.time()
@@ -3512,6 +3289,172 @@ def export_report_pdf():
         flash('Failed to generate report. Please try again.', 'error')
         return redirect(url_for('dashboard'))
 
+@app.route("/categories", methods=["GET"])
+@login_required
+def manage_categories():
+    """Display and manage user categories."""
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Get global categories
+        global_categories = db.execute("""
+            SELECT id, name, type, 'global' as scope 
+            FROM categories 
+            ORDER BY type, name
+        """)
+        
+        # Get user-defined categories
+        user_categories = db.execute("""
+            SELECT id, name, type, color, icon, is_active, 'user' as scope
+            FROM user_categories 
+            WHERE user_id = ? 
+            ORDER BY type, name
+        """, user_id)
+        
+        return render_template("categories.html",
+                             global_categories=global_categories,
+                             user_categories=user_categories)
+    except Exception as e:
+        logger.error(f"Error loading categories: {str(e)}")
+        flash('Failed to load categories.', 'error')
+        return redirect(url_for('dashboard'))
+
+@app.route("/categories/add", methods=["POST"])
+@login_required
+def add_user_category():
+    """Add a new user-defined category."""
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Validate input
+    name = request.form.get('name', '').strip()[:50]
+    category_type = request.form.get('type', '').strip()
+    color = request.form.get('color', '#808080').strip()
+    icon = request.form.get('icon', 'folder').strip()
+    
+    if not name:
+        flash('Category name is required.', 'error')
+        return redirect(url_for('manage_categories'))
+    
+    if category_type not in ['income', 'expense']:
+        flash('Invalid category type.', 'error')
+        return redirect(url_for('manage_categories'))
+    
+    # Validate color format (basic hex validation)
+    if not re.match(r'^#[0-9A-Fa-f]{6}$', color):
+        color = '#808080'  # Default gray
+    
+    try:
+        # Check if category name already exists for this user
+        existing = db.execute("""
+            SELECT id FROM user_categories 
+            WHERE user_id = ? AND name = ?
+        """, user_id, name)
+        
+        if existing:
+            flash('Category with this name already exists.', 'error')
+            return redirect(url_for('manage_categories'))
+        
+        # Insert new category
+        category_id = db.execute("""
+            INSERT INTO user_categories (user_id, name, type, color, icon)
+            VALUES (?, ?, ?, ?, ?)
+        """, user_id, name, category_type, color, icon)
+        
+        log_security_event(user_id, 'USER_CATEGORY_CREATED', f'Category: {name}')
+        flash(f'Category "{name}" created successfully!', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error creating category: {str(e)}")
+        flash('Failed to create category.', 'error')
+    
+    return redirect(url_for('manage_categories'))
+
+@app.route("/categories/<int:category_id>/edit", methods=["POST"])
+@login_required
+def edit_user_category(category_id):
+    """Edit a user-defined category."""
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    # Verify ownership
+    category = db.execute("""
+        SELECT * FROM user_categories 
+        WHERE id = ? AND user_id = ?
+    """, category_id, user_id)
+    
+    if not category:
+        flash('Category not found or access denied.', 'error')
+        return redirect(url_for('manage_categories'))
+    
+    # Get new values
+    name = request.form.get('name', '').strip()[:50]
+    color = request.form.get('color', '#808080').strip()
+    icon = request.form.get('icon', 'folder').strip()
+    is_active = request.form.get('is_active') == 'true'
+    
+    if not name:
+        flash('Category name is required.', 'error')
+        return redirect(url_for('manage_categories'))
+    
+    try:
+        db.execute("""
+            UPDATE user_categories 
+            SET name = ?, color = ?, icon = ?, is_active = ?
+            WHERE id = ? AND user_id = ?
+        """, name, color, icon, is_active, category_id, user_id)
+        
+        log_security_event(user_id, 'USER_CATEGORY_EDITED', f'Category ID: {category_id}')
+        flash('Category updated successfully!', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error updating category: {str(e)}")
+        flash('Failed to update category.', 'error')
+    
+    return redirect(url_for('manage_categories'))
+
+@app.route("/categories/<int:category_id>/delete", methods=["POST"])
+@login_required
+def delete_user_category(category_id):
+    """Delete a user-defined category."""
+    if not validate_session():
+        return redirect(url_for('login'))
+    
+    user_id = session.get('user_id')
+    
+    try:
+        # Check if category has transactions
+        transactions = db.execute("""
+            SELECT COUNT(*) as count 
+            FROM transactions 
+            WHERE user_id = ? AND category_id = ?
+        """, user_id, -category_id)  # Negative ID for user categories
+        
+        if transactions and transactions[0]['count'] > 0:
+            flash('Cannot delete category with existing transactions.', 'error')
+            return redirect(url_for('manage_categories'))
+        
+        # Delete category
+        db.execute("""
+            DELETE FROM user_categories 
+            WHERE id = ? AND user_id = ?
+        """, category_id, user_id)
+        
+        log_security_event(user_id, 'USER_CATEGORY_DELETED', f'Category ID: {category_id}')
+        flash('Category deleted successfully!', 'success')
+        
+    except Exception as e:
+        logger.error(f"Error deleting category: {str(e)}")
+        flash('Failed to delete category.', 'error')
+    
+    return redirect(url_for('manage_categories'))
 
 # Error handlers
 @app.errorhandler(404)
@@ -3536,9 +3479,8 @@ def security_headers(response):
 
 if __name__ == '__main__':
     """Run the Flask application with enhanced security features"""
-    # Initialiser la base de données au démarrage
-    init_db()
-
+    # Database is already initialized at module load time
+    
     # Production security checks
     if os.environ.get('FLASK_ENV') == 'production':
         required_env_vars = [

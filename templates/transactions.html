@@ -170,11 +170,23 @@
                 </div>      
                     <div class="col-md-2">
                         <label for="add-category" class="form-label">Category</label>
+                        <!-- Replace the existing category select with this: -->
                         <select id="add-category" name="category_id" class="form-select" required>
                             <option value="">Select Category</option>
-                            {% for cat in categories %}
-                            <option value="{{ cat.id }}">{{ cat.name }}</option>
-                            {% endfor %}
+                            <optgroup label="My Categories">
+                                {% for cat in user_categories if cat.is_active %}
+                                <option value="-{{ cat.id }}" data-type="{{ cat.type }}">
+                                    {{ cat.name }}
+                                </option>
+                                {% endfor %}
+                            </optgroup>
+                            <optgroup label="Default Categories">
+                                {% for cat in categories %}
+                                <option value="{{ cat.id }}" data-type="{{ cat.type }}">
+                                    {{ cat.name }}
+                                </option>
+                                {% endfor %}
+                            </optgroup>
                         </select>
                         {% if categories|length == 0 %}
                         <div class="text-danger mt-1">No categories available. Please add categories first.</div>

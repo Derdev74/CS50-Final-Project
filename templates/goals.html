@@ -257,6 +257,30 @@
                                                    value="{{ goal.deadline }}" 
                                                    min="{{ current_date }}">
                                         </div>
+                                        <!-- Add these fields to the existing goal form -->
+                                        <div class="mb-3">
+                                            <label class="form-label">Goal Type</label>
+                                            <select name="goal_type" class="form-select">
+                                                <option value="savings">Savings</option>
+                                                <option value="debt">Debt Payoff</option>
+                                                <option value="investment">Investment</option>
+                                                <option value="purchase">Purchase</option>
+                                                <option value="emergency">Emergency Fund</option>
+                                                <option value="other">Other</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Notes</label>
+                                            <textarea name="notes" class="form-control" rows="3" maxlength="500"></textarea>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Color</label>
+                                            <input type="color" name="color" class="form-control" value="#4CAF50">
+                                        </div>
+<div class="form-check mb-3">
+    <input type="checkbox" name="is_recurring" value="true" class="form-check-input">
+    <label class="form-check-label">Recurring Goal</label>
+</div>
                                     </div>
                                     <div class="modal-footer">
                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">

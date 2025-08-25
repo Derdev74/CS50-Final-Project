@@ -158,5 +158,199 @@ class TestPasswordReset:
             test_user['email']
         )
         assert user[0]['password_reset_token'] is not None
-    
-    def test_password_reset_with
+
+    def test_password_reset_with_valid_token(self, client, test_user):
+        """Test password reset with valid token."""
+        # Simulate the password reset token
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }, follow_redirects=True)
+
+        assert response.status_code == 200
+        assert b'Password has been reset' in response.data.lower()
+
+    def test_password_reset_with_invalid_token(self, client):
+        """Test password reset with invalid token."""
+        response = client.post('/reset-password/invalid_token', data={
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Invalid or expired password reset token' in response.data.lower()
+
+    def test_password_reset_with_mismatched_passwords(self, client, test_user):
+        """Test password reset with mismatched passwords."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'DifferentPassword123!'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Passwords do not match' in response.data.lower()
+
+    def test_password_reset_with_missing_fields(self, client, test_user):
+        """Test password reset with missing fields."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'NewSecurePass123!',
+            # Missing confirm_password
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Please fill out all fields' in response.data.lower()
+
+    def test_password_reset_with_short_password(self, client, test_user):
+        """Test password reset with short password."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'short',
+            'confirm_password': 'short'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Password must be at least 8 characters long' in response.data.lower()
+
+    def test_password_reset_with_weak_password(self, client, test_user):
+        """Test password reset with weak password."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': '12345678',
+            'confirm_password': '12345678'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Password must include at least one uppercase letter, one lowercase letter, and one number' in response.data.lower()
+
+    def test_password_reset_with_valid_token(self, client, test_user):
+        """Test password reset with valid token."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }, follow_redirects=True)
+
+        assert response.status_code == 200
+        assert b'Password has been reset' in response.data.lower()
+
+    def test_password_reset_with_invalid_token(self, client):
+        """Test password reset with invalid token."""
+        response = client.post('/reset-password/invalid_token', data={
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Invalid or expired password reset token' in response.data.lower()
+
+    def test_password_reset_with_mismatched_passwords(self, client, test_user):
+        """Test password reset with mismatched passwords."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'DifferentPassword123!'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Passwords do not match' in response.data.lower()
+
+    def test_password_reset_with_missing_fields(self, client, test_user):
+        """Test password reset with missing fields."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'NewSecurePass123!',
+            # Missing confirm_password
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Please fill out all fields' in response.data.lower()
+
+    def test_password_reset_with_short_password(self, client, test_user):
+        """Test password reset with short password."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'short',
+            'confirm_password': 'short'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Password must be at least 8 characters long' in response.data.lower()
+
+    def test_password_reset_with_weak_password(self, client, test_user):
+        """Test password reset with weak password."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': '12345678',
+            'confirm_password': '12345678'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Password must include at least one uppercase letter, one lowercase letter, and one number' in response.data.lower()
+
+    def test_password_reset_with_valid_token(self, client, test_user):
+        """Test password reset with valid token."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }, follow_redirects=True)
+
+        assert response.status_code == 200
+        assert b'Password has been reset' in response.data.lower()
+
+    def test_password_reset_with_invalid_token(self, client):
+        """Test password reset with invalid token."""
+        response = client.post('/reset-password/invalid_token', data={
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'NewSecurePass123!'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Invalid or expired password reset token' in response.data.lower()
+
+    def test_password_reset_with_mismatched_passwords(self, client, test_user):
+        """Test password reset with mismatched passwords."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'NewSecurePass123!',
+            'confirm_password': 'DifferentPassword123!'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Passwords do not match' in response.data.lower()
+
+    def test_password_reset_with_missing_fields(self, client, test_user):
+        """Test password reset with missing fields."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'NewSecurePass123!',
+            # Missing confirm_password
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Please fill out all fields' in response.data.lower()
+
+    def test_password_reset_with_short_password(self, client, test_user):
+        """Test password reset with short password."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': 'short',
+            'confirm_password': 'short'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Password must be at least 8 characters long' in response.data.lower()
+
+    def test_password_reset_with_weak_password(self, client, test_user):
+        """Test password reset with weak password."""
+        token = test_user['password_reset_token']
+        response = client.post(f'/reset-password/{token}', data={
+            'new_password': '12345678',
+            'confirm_password': '12345678'
+        }, follow_redirects=True)
+
+        assert response.status_code == 400
+        assert b'Password must include at least one uppercase letter, one lowercase letter, and one number' in response.data.lower()

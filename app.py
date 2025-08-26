@@ -1407,18 +1407,8 @@ def add_transaction():
             return redirect(url_for('transactions'))
     
     try:
-        if category_id > 0:
-            # Global category
-            category = db.execute("""
-                SELECT type FROM categories 
-                WHERE id = ? AND type IN ('income', 'expense')
-            """, category_id)
-        else:
-            # User category (negative ID)
-            category = db.execute("""
-                SELECT type FROM user_categories 
-                WHERE id = ? AND user_id = ? AND type IN ('income', 'expense')
-            """, abs(category_id), user_id)
+        # Check both global and user categories
+        category = db.execute(""" SELECT type FROM categories WHERE id = ? AND type IN ('income', 'expense') UNION SELECT type FROM user_categories WHERE id = ? AND user_id = ? AND type IN ('income', 'expense') AND is_active = TRUE """, category_id, category_id, user_id)
         
         if not category:
             flash('Invalid category selected.', 'error')
@@ -3410,7 +3400,7 @@ def edit_user_category(category_id):
     category = db.execute("""
         SELECT * FROM user_categories 
         WHERE id = ? AND user_id = ?
-    """, category_id, user_id)
+        """, category_id, user_id)
     
     if not category:
         flash('Category not found or access denied.', 'error')

@@ -1,4 +1,4 @@
-"""
+""":
 Export Service Module for FinTrack Application
 
 This module provides comprehensive data export functionality, allowing users
@@ -265,7 +265,7 @@ class ExportService:
             StringIO object containing CSV data
         """
         try:
-            goals = db.execute("""
+            goals = self.db.execute("""
                 SELECT 
                     id,
                     name,
@@ -494,7 +494,7 @@ class ExportService:
             # Goals Section
             elements.append(Paragraph("Savings Goals", self.styles['CustomSubtitle']))
             
-            goals = db.execute("""
+            goals = self.db.execute("""
                 SELECT 
                     id,
                     name,

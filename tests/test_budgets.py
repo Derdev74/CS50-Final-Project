@@ -4,7 +4,7 @@ Test suite for budget management functionality.
 Tests budget CRUD operations, spending tracking, and period calculations.
 """
 
-from app import db
+
 import pytest
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -19,7 +19,7 @@ class TestBudgets:
         assert response.status_code == 200
         assert b'Budget' in response.data
     
-    def test_create_budget(self, authenticated_client, test_categories, app, test_user):
+    def test_create_budget(self, authenticated_client, test_categories, app_context, test_user):
         """Test creating a new budget."""
         expense_category = next(c for c in test_categories if c['type'] == 'expense')
         
@@ -34,13 +34,13 @@ class TestBudgets:
         assert b'Budget created successfully' in response.data
         
         # Verify budget was created
-        with app.app_context():
-            budget = db.execute(
+        
+        budget = db.execute(
                 "SELECT * FROM budgets WHERE user_id = ? AND category_id = ?",
                 test_user['id'], expense_category['id']
             )
-            assert len(budget) == 1
-            assert budget[0]['amount'] == 500.00
+        assert len(budget) == 1
+        assert budget[0]['amount'] == 500.00
     
     def test_create_duplicate_budget(self, authenticated_client, test_budget):
         """Test creating duplicate budget for same category/period."""
@@ -64,7 +64,7 @@ class TestBudgets:
         assert response.status_code == 200
         assert b'Budget updated successfully' in response.data
     
-    def test_delete_budget(self, authenticated_client, test_budget, app):
+    def test_delete_budget(self, authenticated_client, test_budget, app_context):
         """Test deleting a budget."""
         response = authenticated_client.post(
             f'/budget/{test_budget["id"]}/delete',
@@ -75,15 +75,13 @@ class TestBudgets:
         assert b'Budget deleted successfully' in response.data
         
         # Verify budget was deleted
-        with app.app_context():
-            budget = db.execute("SELECT * FROM budgets WHERE id = ?", test_budget['id'])
-            assert len(budget) == 0
+        budget = db.execute("SELECT * FROM budgets WHERE id = ?", test_budget['id'])
+        assert len(budget) == 0
     
-    def test_budget_spending_calculation(self, authenticated_client, test_budget, test_user, app):
+    def test_budget_spending_calculation(self, authenticated_client, test_budget, test_user, app_context):
         """Test that budget spending is calculated correctly."""
         # Add a transaction in the budget category
-        with app.app_context():
-            db.execute(
+        db.execute(
                 """INSERT INTO transactions (user_id, category_id, amount, date)
                    VALUES (?, ?, ?, ?)""",
                 test_user['id'], test_budget['category_id'], -200,

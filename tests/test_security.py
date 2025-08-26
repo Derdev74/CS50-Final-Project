@@ -4,9 +4,10 @@ Test suite for security features.
 Tests authentication, authorization, CSRF protection, and input validation.
 """
 
-from app import db
+
 import pytest
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 class TestSecurity:
     """Test security features and protections."""
@@ -56,11 +57,10 @@ class TestSecurity:
         # Should fail or require CSRF token
         assert response.status_code in [400, 403, 302]
     
-    def test_unauthorized_access_prevention(self, client, test_user, test_transactions, app):
+    def test_unauthorized_access_prevention(self, client, test_user, test_transactions, app_context):
         """Test that users cannot access other users' data."""
         # Create another user
-        with app.app_context():
-            other_user_id = db.execute(
+        other_user_id = db.execute(
                 """INSERT INTO users (username, email, password_hash, email_verified)
                    VALUES (?, ?, ?, ?)""",
                 'otheruser', 'other@test.com', 'hash', True
@@ -76,9 +76,8 @@ class TestSecurity:
         response = client.post(f'/transactions/{test_transactions[0]["id"]}/delete')
         
         # Should not be able to delete other user's transaction
-        with app.app_context():
-            txn = db.execute("SELECT * FROM transactions WHERE id = ?", test_transactions[0]['id'])
-            assert len(txn) == 1  # Transaction should still exist
+        txn = db.execute("SELECT * FROM transactions WHERE id = ?", test_transactions[0]['id'])
+        assert len(txn) == 1  # Transaction should still exist
     
     def test_password_complexity_requirements(self, client):
         """Test password complexity validation."""
@@ -103,7 +102,7 @@ class TestSecurity:
             # Should reject weak passwords
             assert b'Password must' in response.data or b'password' in response.data.lower()
     
-    def test_session_timeout(self, client, test_user, app, monkeypatch):
+    def test_session_timeout(self, client, test_user, app_context, monkeypatch):
         """Test session timeout functionality."""
         # Login
         client.post('/login', data={

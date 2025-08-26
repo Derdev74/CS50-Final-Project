@@ -3,10 +3,10 @@ Test suite for transaction management functionality.
 
 Tests transaction CRUD operations, filtering, and currency conversion.
 """
-from app import db
+
 import pytest
-from decimal import Decimal
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 class TestTransactions:
     """Test transaction-related functionality."""
@@ -18,7 +18,7 @@ class TestTransactions:
         assert response.status_code == 200
         assert b'Transactions' in response.data
     
-    def test_add_expense_transaction(self, authenticated_client, test_user, test_categories, app):
+    def test_add_expense_transaction(self, authenticated_client, test_user, test_categories, app_context):
         """Test adding an expense transaction."""
         expense_category = next(c for c in test_categories if c['type'] == 'expense')
         
@@ -34,11 +34,10 @@ class TestTransactions:
         assert b'Transaction added successfully' in response.data
         
         # Verify balance was updated
-        with app.app_context():
-            user = db.execute("SELECT cash FROM users WHERE id = ?", test_user['id'])
-            assert user[0]['cash'] < test_user['cash']
+        user = db.execute("SELECT cash FROM users WHERE id = ?", test_user['id'])
+        assert user[0]['cash'] < test_user['cash']
     
-    def test_add_income_transaction(self, authenticated_client, test_user, test_categories, app):
+    def test_add_income_transaction(self, authenticated_client, test_user, test_categories, app_context):
         """Test adding an income transaction."""
         income_category = next(c for c in test_categories if c['type'] == 'income')
         
@@ -54,9 +53,8 @@ class TestTransactions:
         assert b'Transaction added successfully' in response.data
         
         # Verify balance was updated
-        with app.app_context():
-            user = db.execute("SELECT cash FROM users WHERE id = ?", test_user['id'])
-            assert user[0]['cash'] > test_user['cash']
+        user = db.execute("SELECT cash FROM users WHERE id = ?", test_user['id'])
+        assert user[0]['cash'] > test_user['cash']
     
     def test_add_transaction_invalid_amount(self, authenticated_client, test_categories):
         """Test adding transaction with invalid amount."""
@@ -88,7 +86,7 @@ class TestTransactions:
         assert response.status_code == 200
         assert b'Transaction updated successfully' in response.data
     
-    def test_delete_transaction(self, authenticated_client, test_transactions, app):
+    def test_delete_transaction(self, authenticated_client, test_transactions, app_context):
         """Test deleting a transaction."""
         transaction = test_transactions[0]
         
@@ -101,9 +99,8 @@ class TestTransactions:
         assert b'Transaction deleted successfully' in response.data
         
         # Verify transaction was deleted
-        with app.app_context():
-            txn = db.execute("SELECT * FROM transactions WHERE id = ?", transaction['id'])
-            assert len(txn) == 0
+        txn = db.execute("SELECT * FROM transactions WHERE id = ?", transaction['id'])
+        assert len(txn) == 0
     
     def test_transaction_filtering(self, authenticated_client, test_transactions, test_categories):
         """Test transaction filtering by category and date."""
@@ -119,12 +116,11 @@ class TestTransactions:
         response = authenticated_client.get(f'/transactions?from={date_from}&to={date_to}')
         assert response.status_code == 200
     
-    def test_transaction_pagination(self, authenticated_client, test_user, test_categories, app):
+    def test_transaction_pagination(self, authenticated_client, test_user, test_categories, app_context):
         """Test transaction pagination."""
         # Create 25 transactions (more than per_page limit)
-        with app.app_context():
-            for i in range(25):
-                db.execute(
+        for i in range(25):
+            db.execute(
                     """INSERT INTO transactions (user_id, category_id, amount, description, date)
                        VALUES (?, ?, ?, ?, ?)""",
                     test_user['id'], test_categories[0]['id'], -50,

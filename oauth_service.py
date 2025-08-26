@@ -98,17 +98,23 @@ class GoogleOAuthService:
     def get_token(self, authorization_response, redirect_url):
         """Exchange authorization code for tokens."""
         try:
+            # Get provider configuration to access token endpoint
+            provider_cfg = self.get_provider_cfg()
+            if not provider_cfg:
+                return None
+            
+            token_endpoint = provider_cfg["token_endpoint"]
+            
             # Parse the authorization code from the response
             self.client.parse_request_uri_response(authorization_response)
             
             # Prepare the token request
             token_url, headers, body = self.client.prepare_token_request(
-                self.token_uri,
+                token_endpoint,
                 authorization_response=authorization_response,
                 redirect_url=redirect_url,
                 client_secret=self.client_secret
                 )
-                
             # Make the token request
             response = requests.post(token_url, headers=headers, data=body)
                 

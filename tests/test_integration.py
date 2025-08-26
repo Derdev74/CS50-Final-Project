@@ -4,7 +4,7 @@ Integration tests for complete user workflows.
 Tests end-to-end scenarios combining multiple features.
 """
 
-from app import db
+
 import pytest
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -13,7 +13,7 @@ from decimal import Decimal
 class TestIntegration:
     """Test complete user workflows and feature integration."""
     
-    def test_complete_budget_workflow(self, authenticated_client, test_categories, test_user, app):
+    def test_complete_budget_workflow(self, authenticated_client, test_categories, test_user, app_context):
         """Test creating budget, adding transactions, and viewing spending."""
         expense_category = next(c for c in test_categories if c['type'] == 'expense')
         
@@ -43,7 +43,7 @@ class TestIntegration:
         assert b'150' in response.data
         assert b'500' in response.data
     
-    def test_goal_tracking_workflow(self, authenticated_client, test_user, app):
+    def test_goal_tracking_workflow(self, authenticated_client, test_user, app_context):
         """Test creating goal, updating progress, and achieving it."""
         # Create a goal
         authenticated_client.post('/goal/add', data={
@@ -55,8 +55,7 @@ class TestIntegration:
         })
         
         # Get goal ID
-        with app.app_context():
-            goal = db.execute(
+        goal = db.execute(
                 "SELECT id FROM goals WHERE user_id = ? AND name = ?",
                 test_user['id'], 'Test Savings'
             )[0]
@@ -72,7 +71,7 @@ class TestIntegration:
         # Should show goal completed
         assert b'Congratulations' in response.data
     
-    def test_multi_currency_workflow(self, authenticated_client, test_categories, test_user, app):
+    def test_multi_currency_workflow(self, authenticated_client, test_categories, test_user, app_context):
         """Test handling multiple currencies in transactions."""
         # Update user's preferred currency
         authenticated_client.post('/profile/preferences', data={

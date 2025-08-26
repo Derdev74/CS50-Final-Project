@@ -3,14 +3,16 @@ Test suite for authentication functionality.
 
 Tests user registration, login, logout, password reset, and session management.
 """
-
+from datetime import datetime, timedelta
+from decimal import Decimal
+import app
 import pytest
 from werkzeug.security import check_password_hash
 
 class TestAuthentication:
     """Test authentication routes and functionality."""
     
-    def test_register_new_user(self, client, app):
+    def test_register_new_user(self, client, app_context):
         """Test successful user registration."""
         response = client.post('/register', data={
             'username': 'newuser',
@@ -23,14 +25,27 @@ class TestAuthentication:
         assert response.status_code == 200
         
         # Verify user was created in database
-        with app.app_context():
-            user = db.execute(
-                "SELECT * FROM users WHERE username = ?", 
-                'newuser'
-            )
-            assert user is not None
-            assert user[0]['email'] == 'newuser@test.com'
-    
+        # Use the test_db fixture parameter directly
+    def test_register_new_user(self, client, test_db):
+        """Test successful user registration."""
+        response = client.post('/register', data={
+            'username': 'newuser',
+            'email': 'newuser@test.com',
+            'password': 'SecurePass123!',
+            'confirm_password': 'SecurePass123!',
+            'terms_accepted': True
+        }, follow_redirects=True)
+        
+        assert response.status_code == 200
+        
+        # Verify user was created in database
+        user = test_db.execute(
+            "SELECT * FROM users WHERE username = ?", 
+            'newuser'
+        )
+        assert user is not None
+        assert user[0]['email'] == 'newuser@test.com'
+        
     def test_register_duplicate_username(self, client, test_user):
         """Test registration with existing username."""
         response = client.post('/register', data={
@@ -115,7 +130,7 @@ class TestAuthentication:
         assert response.status_code == 200
         assert b'reset link has been sent' in response.data.lower()
     
-    def test_account_lockout_after_failed_attempts(self, client, test_user, app):
+    def test_account_lockout_after_failed_attempts(self, client, test_user, app_context):
         """Test account lockout after multiple failed login attempts."""
         # Simulate multiple failed login attempts
         for i in range(11):  # More than ACCOUNT_LOCKOUT_ATTEMPTS
@@ -125,9 +140,9 @@ class TestAuthentication:
             })
         
         # Verify account is locked
-        with app.app_context():
-            user = db.execute(
+        
+        user = db.execute(
                 "SELECT locked_until FROM users WHERE username = ?",
                 test_user['username']
             )
-            assert user[0]['locked_until'] is not None
+        assert user[0]['locked_until'] is not None

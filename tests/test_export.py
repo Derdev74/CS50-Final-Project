@@ -4,11 +4,12 @@ Test suite for data export functionality.
 Tests CSV and PDF export features with proper data isolation.
 """
 
-from app import db
+
+from datetime import datetime, timedelta
+from decimal import Decimal
 import pytest
 import csv
 import io
-from datetime import datetime
 
 class TestExport:
     """Test data export functionality."""

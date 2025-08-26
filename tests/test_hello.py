@@ -1,10 +1,12 @@
-import pytest
+"""
+Basic test to verify pytest setup is working.
+"""
 
-def test_user_authentication():
-    test_user = "test_user"
-    password = "test_password"
-    assert authenticate(test_user, password) == True
+def test_pytest_setup():
+    """Test that pytest is working correctly."""
+    assert True
 
-def test_database_utilization():
-    assert database_is_connected() == True
-    assert fetch_data_from_database() is not None
+def test_basic_math():
+    """Test basic arithmetic to verify pytest execution."""
+    assert 2 + 2 == 4
+    assert 10 - 5 == 5

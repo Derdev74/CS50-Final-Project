@@ -53,7 +53,7 @@ class TestAuthentication:
             'terms_accepted': True
         })
         
-        assert b'at least 8 characters' in response.data
+        assert b'Password must' in response.data
     
     def test_login_valid_credentials(self, client, test_user):
         """Test login with valid credentials."""

@@ -1,8 +1,8 @@
 """
-Pytest configuration and fixtures for FinTrack application testing.
+Pytest configuration and fixtures for FinTrack application tests.
 
-This module provides shared fixtures and configuration for all tests,
-including database setup, test client, and mock data generation.
+This module provides reusable fixtures for database setup, user authentication,
+and test data generation across all test modules.
 """
 
 import pytest
@@ -13,185 +13,158 @@ from decimal import Decimal
 from faker import Faker
 from werkzeug.security import generate_password_hash
 
-# Import your Flask app and dependencies
-from app import app, db, init_db
-from services import AuthService, UserService
-from helpers import CurrencyService
-from export_service import ExportService
+# Import your Flask app
+from app import app as flask_app, db, init_db
 
 fake = Faker()
 
 @pytest.fixture(scope='session')
-def test_app():
-    """Create and configure a test Flask application."""
-    # Create a temporary database file
+def app():
+    """Create and configure a test Flask application instance."""
+    # Use a temporary database for testing
     db_fd, db_path = tempfile.mkstemp(suffix='.db')
     
-    # Configure the app for testing
-    app.config.update({
+    flask_app.config.update({
         'TESTING': True,
-        'SECRET_KEY': 'test-secret-key-123',
-        'WTF_CSRF_ENABLED': False,  # Disable CSRF for testing
         'DATABASE': db_path,
-        'REGISTRATION_ENABLED': True,
-        'PASSWORD_RESET_ENABLED': True,
-        'PASSWORD_RESET_TIMEOUT': 15,
-        'MAIL_SERVER': 'localhost',
-        'MAIL_PORT': 25,
-        'MAIL_USE_TLS': False,
-        'MAIL_USERNAME': 'test@example.com',
-        'MAIL_PASSWORD': 'testpass',
-        'MAIL_DEFAULT_SENDER': 'test@example.com',
-        'PERMANENT_SESSION_LIFETIME': timedelta(hours=24)
+        'SECRET_KEY': 'test-secret-key',
+        'WTF_CSRF_ENABLED': False,  # Disable CSRF for testing
+        'MAIL_SUPPRESS_SEND': True,  # Don't send actual emails
     })
     
-    # Initialize the database
-    with app.app_context():
-        global db
-        from cs50 import SQL
-        db = SQL(f"sqlite:///{db_path}")
+    # Initialize test database
+    with flask_app.app_context():
         init_db()
     
-    yield app
+    yield flask_app
     
     # Cleanup
     os.close(db_fd)
     os.unlink(db_path)
 
-@pytest.fixture
-def client(test_app):
+@pytest.fixture(scope='function')
+def client(app):
     """Create a test client for the Flask application."""
-    return test_app.test_client()
+    return app.test_client()
 
-@pytest.fixture
-def runner(test_app):
-    """Create a test runner for CLI commands."""
-    return test_app.test_cli_runner()
+@pytest.fixture(scope='function')
+def runner(app):
+    """Create a test CLI runner for the Flask application."""
+    return app.test_cli_runner()
 
-@pytest.fixture
-def auth_service():
-    """Create an AuthService instance for testing."""
-    user_service = UserService(db)
-    return AuthService(user_service)
-
-@pytest.fixture
-def currency_service():
-    """Create a CurrencyService instance for testing."""
-    return CurrencyService(db)
-
-@pytest.fixture
-def export_service():
-    """Create an ExportService instance for testing."""
-    return ExportService(db)
-
-@pytest.fixture
-def test_user():
-    """Create a test user in the database."""
-    username = fake.user_name()
-    email = fake.email()
-    password = 'TestPass123!'
-    password_hash = generate_password_hash(password)
-    
-    user_id = db.execute("""
-        INSERT INTO users (username, email, password_hash, email_verified, cash)
-        VALUES (?, ?, ?, TRUE, 10000.00)
-    """, username, email, password_hash)
-    
-    return {
-        'id': user_id,
-        'username': username,
-        'email': email,
-        'password': password,
-        'password_hash': password_hash
-    }
-
-@pytest.fixture
+@pytest.fixture(scope='function')
 def authenticated_client(client, test_user):
     """Create an authenticated test client."""
-    # Login the test user
-    response = client.post('/login', data={
+    client.post('/login', data={
         'username': test_user['username'],
-        'password': test_user['password'],
-        'remember_me': False
-    }, follow_redirects=True)
-    
+        'password': test_user['password']
+    })
     return client
 
-@pytest.fixture
-def test_categories():
-    """Create test categories in the database."""
-    categories = [
-        ('Test Food', 'expense'),
-        ('Test Transport', 'expense'),
-        ('Test Salary', 'income'),
-        ('Test Freelance', 'income')
-    ]
-    
-    category_ids = []
-    for name, cat_type in categories:
-        cat_id = db.execute(
-            "INSERT OR IGNORE INTO categories (name, type) VALUES (?, ?)",
-            name, cat_type
+@pytest.fixture(scope='function')
+def test_user(app):
+    """Create a test user in the database."""
+    with app.app_context():
+        username = fake.user_name()
+        email = fake.email()
+        password = 'TestPassword123!'
+        
+        user_id = db.execute(
+            """INSERT INTO users (username, email, password_hash, email_verified, cash)
+               VALUES (?, ?, ?, ?, ?)""",
+            username, email, generate_password_hash(password), True, 10000.00
         )
-        if cat_id:
-            category_ids.append(cat_id)
-    
-    return category_ids
-
-@pytest.fixture
-def test_transactions(test_user, test_categories):
-    """Create test transactions for a user."""
-    transactions = []
-    
-    for i in range(10):
-        amount = fake.random_int(min=10, max=1000)
-        if i % 2 == 0:
-            amount = -amount  # Make some expenses
-            category_id = test_categories[0]  # Expense category
-        else:
-            category_id = test_categories[2]  # Income category
         
-        trans_id = db.execute("""
-            INSERT INTO transactions (user_id, category_id, amount, description, date)
-            VALUES (?, ?, ?, ?, ?)
-        """, test_user['id'], category_id, amount, 
-            fake.sentence(), datetime.now() - timedelta(days=i))
+        return {
+            'id': user_id,
+            'username': username,
+            'email': email,
+            'password': password,
+            'cash': 10000.00
+        }
+
+@pytest.fixture(scope='function')
+def test_categories(app):
+    """Create test categories."""
+    with app.app_context():
+        # Use unique names to avoid conflicts with default categories
+        categories = [
+            (f'Test Food {fake.random_int(1000, 9999)}', 'expense'),
+            (f'Test Transport {fake.random_int(1000, 9999)}', 'expense'),
+            (f'Test Salary {fake.random_int(1000, 9999)}', 'income'),
+        ]
         
-        transactions.append({
-            'id': trans_id,
-            'amount': amount,
-            'category_id': category_id
-        })
-    
-    return transactions
+        created = []
+        for name, cat_type in categories:
+            cat_id = db.execute(
+                "INSERT INTO categories (name, type) VALUES (?, ?)",
+                name, cat_type
+            )
+            created.append({'id': cat_id, 'name': name, 'type': cat_type})
+        
+        return created
 
-@pytest.fixture
-def test_budget(test_user, test_categories):
-    """Create a test budget for a user."""
-    budget_id = db.execute("""
-        INSERT INTO budgets (user_id, category_id, amount, period, start_date)
-        VALUES (?, ?, ?, ?, ?)
-    """, test_user['id'], test_categories[0], 500.00, 'monthly', 
-        datetime.now().strftime('%Y-%m-%d'))
-    
-    return {
-        'id': budget_id,
-        'amount': 500.00,
-        'category_id': test_categories[0]
-    }
+@pytest.fixture(scope='function')
+def test_transactions(app, test_user, test_categories):
+    """Create test transactions."""
+    with app.app_context():
+        transactions = []
+        
+        for i in range(5):
+            category = test_categories[i % len(test_categories)]
+            amount = fake.random_int(min=10, max=1000)
+            if category['type'] == 'expense':
+                amount = -amount
+            
+            txn_id = db.execute(
+                """INSERT INTO transactions (user_id, category_id, amount, description, date)
+                   VALUES (?, ?, ?, ?, ?)""",
+                test_user['id'], category['id'], amount,
+                fake.sentence(), datetime.now() - timedelta(days=i)
+            )
+            
+            transactions.append({
+                'id': txn_id,
+                'amount': amount,
+                'category_id': category['id']
+            })
+        
+        return transactions
 
-@pytest.fixture
-def test_goal(test_user):
-    """Create a test goal for a user."""
-    goal_id = db.execute("""
-        INSERT INTO goals (user_id, name, target_amount, current_amount, deadline)
-        VALUES (?, ?, ?, ?, ?)
-    """, test_user['id'], 'Test Vacation', 5000.00, 1000.00,
-        (datetime.now() + timedelta(days=180)).strftime('%Y-%m-%d'))
-    
-    return {
-        'id': goal_id,
-        'name': 'Test Vacation',
-        'target_amount': 5000.00,
-        'current_amount': 1000.00
-    }
+@pytest.fixture(scope='function')
+def test_budget(app, test_user, test_categories):
+    """Create a test budget."""
+    with app.app_context():
+        expense_category = next(c for c in test_categories if c['type'] == 'expense')
+        
+        budget_id = db.execute(
+            """INSERT INTO budgets (user_id, category_id, amount, period, start_date)
+               VALUES (?, ?, ?, ?, ?)""",
+            test_user['id'], expense_category['id'], 1000.00,
+            'monthly', datetime.now().date()
+        )
+        
+        return {
+            'id': budget_id,
+            'category_id': expense_category['id'],
+            'amount': 1000.00,
+            'period': 'monthly'
+        }
+
+@pytest.fixture(scope='function')
+def test_goal(app, test_user):
+    """Create a test goal."""
+    with app.app_context():
+        goal_id = db.execute(
+            """INSERT INTO goals (user_id, name, target_amount, current_amount, deadline)
+               VALUES (?, ?, ?, ?, ?)""",
+            test_user['id'], 'Test Vacation Fund', 5000.00, 1000.00,
+            (datetime.now() + timedelta(days=365)).date()
+        )
+        
+        return {
+            'id': goal_id,
+            'name': 'Test Vacation Fund',
+            'target_amount': 5000.00,
+            'current_amount': 1000.00
+        }

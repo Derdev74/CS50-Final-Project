@@ -4,6 +4,7 @@ Test suite for security features.
 Tests authentication, authorization, CSRF protection, and input validation.
 """
 
+from app import db
 import pytest
 from datetime import datetime, timedelta
 

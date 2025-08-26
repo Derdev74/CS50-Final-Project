@@ -27,6 +27,8 @@ from oauthlib.oauth2 import WebApplicationClient
 from export_service import ExportService
 import json
 
+
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 # Load environment variables
 load_dotenv()
 
@@ -788,8 +790,13 @@ def login():
     form = LoginForm()
     if 'user_id' in session and validate_session():
         return redirect(url_for('dashboard'))
-    
+
+    return render_template('login.html', form=form)
     if form.validate_on_submit():
+        try:
+            check_rate_limit(client_ip, username)
+        except Exception as e:
+            flash(str(e), 'error')
         try:
             client_ip = get_client_ip()
             username = form.username.data.strip()
@@ -822,6 +829,7 @@ def login():
                     return redirect(next_page)
                 return redirect(url_for('dashboard'))
             else:
+                record_failed_login(username)
                 flash(error or 'Invalid username or password.', 'error')
                 
         except Exception as e:
@@ -1368,7 +1376,7 @@ def add_transaction():
     
     # Validate category
     category_id = request.form.get('category_id', type=int)
-    if not category_id or category_id <= 0:
+    if not category_id or category_id == 0:
         flash('Please select a valid category.', 'error')
         return redirect(url_for('transactions'))
     
@@ -1399,11 +1407,18 @@ def add_transaction():
             return redirect(url_for('transactions'))
     
     try:
-        # Verify category exists and belongs to valid types
-        category = db.execute("""
-            SELECT type FROM categories 
-            WHERE id = ? AND type IN ('income', 'expense')
-        """, category_id)
+        if category_id > 0:
+            # Global category
+            category = db.execute("""
+                SELECT type FROM categories 
+                WHERE id = ? AND type IN ('income', 'expense')
+            """, category_id)
+        else:
+            # User category (negative ID)
+            category = db.execute("""
+                SELECT type FROM user_categories 
+                WHERE id = ? AND user_id = ? AND type IN ('income', 'expense')
+            """, abs(category_id), user_id)
         
         if not category:
             flash('Invalid category selected.', 'error')
@@ -1785,7 +1800,7 @@ def add_budget():
     # Validate and sanitize input with comprehensive checks
     # This prevents both accidental errors and malicious input
     category_id = request.form.get('category_id', type=int)
-    if not category_id or category_id <= 0:
+    if not category_id or category_id == 0:
         flash('Please select a valid category.', 'error')
         return redirect(url_for('budget'))
     
@@ -1851,8 +1866,9 @@ def add_budget():
             WHERE user_id = ? AND category_id = ? AND period = ?
         """, user_id, category_id, period)
         
+        # NEW - Make sure the flash happens BEFORE redirect
         if existing:
-            flash('A budget already exists for this category and period. Please edit the existing budget instead.', 'warning')
+            flash('A budget already exists for this category and period.', 'error')
             return redirect(url_for('budget'))
         
         # Insert new budget
@@ -2409,12 +2425,14 @@ def profile():
     try:
         # Fetch complete user information from the database
         # We need all user fields to display current settings
+        # Replace the SELECT statement (line 2334-2338)
         user = db.execute("""
-    SELECT id, username, email, email_verified, cash, theme, 
-           last_login, created_at, updated_at, preferred_currency
-    FROM users 
-    WHERE id = ?
-""", user_id)
+            SELECT id, username, email, email_verified, cash, theme, 
+                last_login, created_at, updated_at,
+                COALESCE(preferred_currency, 'USD') as preferred_currency
+            FROM users 
+            WHERE id = ?
+        """, user_id)
         
         if not user:
             # This shouldn't happen with proper session management, but we check anyway
@@ -2768,9 +2786,14 @@ def delete_account():
         return redirect(url_for('profile'))
     
     try:
-        # Verify password
+        # NEW
         user = db.execute("SELECT password_hash, username FROM users WHERE id = ?", user_id)[0]
-        
+
+        # Check if user has a password (not OAuth-only account)
+        if not user['password_hash']:
+            flash('OAuth accounts cannot be deleted this way. Please contact support.', 'error')
+            return redirect(url_for('profile'))
+
         if not check_password_hash(user['password_hash'], password):
             log_security_event(user_id, 'ACCOUNT_DELETION_FAILED', 'Incorrect password')
             flash('Incorrect password. Account deletion cancelled.', 'error')
@@ -2926,9 +2949,9 @@ def google_callback():
             # Set up session
             session.clear()
             session['user_id'] = user['id']
-            session['username'] = username
+            session['username'] = user['username']
             session['login_time'] = datetime.now().isoformat()
-            session['ip_address'] = client_ip
+            session['ip_address'] = get_client_ip()
             session['oauth_provider'] = 'google'
             
             log_security_event(user['id'], 'GOOGLE_LOGIN_SUCCESS', 

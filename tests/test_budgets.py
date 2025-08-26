@@ -4,6 +4,7 @@ Test suite for budget management functionality.
 Tests budget CRUD operations, spending tracking, and period calculations.
 """
 
+from app import db
 import pytest
 from datetime import datetime, timedelta
 from decimal import Decimal

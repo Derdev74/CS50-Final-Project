@@ -53,7 +53,7 @@
                 {% for txn in transactions %}
                 <tr data-id="{{ txn.id }}">
                     <td>{{ txn.date[:10] }}</td>
-                    <td>{{ txn.description }}</td>
+                    <td>{{ txn.description|e }}</td>
                     <td>{{ txn.category_name }}</td>
                     <td class="fw-bold {% if txn.amount < 0 %}text-danger{% else %}text-success{% endif %}">
                         {% if txn.display_currency %}

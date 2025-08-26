@@ -4,9 +4,11 @@ Integration tests for complete user workflows.
 Tests end-to-end scenarios combining multiple features.
 """
 
+from app import db
 import pytest
 from datetime import datetime, timedelta
 from decimal import Decimal
+
 
 class TestIntegration:
     """Test complete user workflows and feature integration."""

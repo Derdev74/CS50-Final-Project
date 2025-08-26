@@ -96,49 +96,31 @@ class GoogleOAuthService:
         return request_uri
     
     def get_token(self, authorization_response, redirect_url):
-        """
-        Exchange the authorization code for tokens.
-        
-        Args:
-            authorization_response: The full URL with authorization code
-            redirect_url: The redirect URL used in the authorization request
+        """Exchange authorization code for tokens."""
+        try:
+            # Parse the authorization code from the response
+            self.client.parse_request_uri_response(authorization_response)
             
-        Returns:
-            dict: Token response including access_token and id_token
-        """
-        provider_cfg = self.get_provider_cfg()
-        if not provider_cfg:
+            # Prepare the token request
+            token_url, headers, body = self.client.prepare_token_request(
+                self.token_uri,
+                authorization_response=authorization_response,
+                redirect_url=redirect_url,
+                client_secret=self.client_secret
+                )
+                
+            # Make the token request
+            response = requests.post(token_url, headers=headers, data=body)
+                
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Token exchange failed: {response.text}")
+                return None
+                    
+        except Exception as e:
+            logger.error(f"Error getting token: {str(e)}")
             return None
-        
-        token_endpoint = provider_cfg["token_endpoint"]
-        
-        # Parse the authorization code from the response
-        code = self.client.parse_request_uri_response(authorization_response)
-        
-        # Prepare the token request
-        token_url, headers, body = self.client.prepare_token_request(
-            token_endpoint,
-            authorization_response=authorization_response,
-            redirect_url=redirect_url,
-            code=code
-        )
-        
-        # Exchange authorization code for tokens
-        token_response = requests.post(
-            token_url,
-            headers=headers,
-            data=body,
-            auth=(self.client_id, self.client_secret),
-        )
-        
-        if token_response.status_code != 200:
-            logger.error(f"Token exchange failed: {token_response.text}")
-            return None
-        
-        # Parse the tokens
-        self.client.parse_request_body_response(token_response.text)
-        
-        return token_response.json()
     
     def get_user_info(self, token):
         """

@@ -4,6 +4,7 @@ Test suite for user-defined categories functionality.
 Tests category CRUD operations and integration with transactions.
 """
 
+from app import db
 import pytest
 
 class TestCategories:

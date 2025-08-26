@@ -3,7 +3,7 @@ Test suite for transaction management functionality.
 
 Tests transaction CRUD operations, filtering, and currency conversion.
 """
-
+from app import db
 import pytest
 from decimal import Decimal
 from datetime import datetime, timedelta

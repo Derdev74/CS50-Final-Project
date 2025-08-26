@@ -11,7 +11,7 @@ Security considerations:
 - File generation is done in memory to avoid disk storage
 - Sanitization of data to prevent injection attacks
 """
-
+from datetime import datetime
 import csv
 import io
 import logging
@@ -265,19 +265,18 @@ class ExportService:
             StringIO object containing CSV data
         """
         try:
-            goals = self.db.execute("""
+            goals = db.execute("""
                 SELECT 
                     id,
                     name,
                     target_amount,
                     current_amount,
                     deadline,
-                    created_at
+                    COALESCE(created_at, datetime('now')) as created_at
                 FROM goals
                 WHERE user_id = ?
-                ORDER BY deadline, created_at
+                ORDER BY deadline, id
             """, user_id)
-            
             # Create CSV in memory
             output = io.StringIO()
             writer = csv.writer(output)
@@ -495,18 +494,18 @@ class ExportService:
             # Goals Section
             elements.append(Paragraph("Savings Goals", self.styles['CustomSubtitle']))
             
-            goals = self.db.execute("""
+            goals = db.execute("""
                 SELECT 
+                    id,
                     name,
                     target_amount,
                     current_amount,
-                    deadline
+                    deadline,
+                    COALESCE(created_at, datetime('now')) as created_at
                 FROM goals
                 WHERE user_id = ?
-                ORDER BY deadline, created_at
-                LIMIT 10
+                ORDER BY deadline, id
             """, user_id)
-            
             if goals:
                 goals_data = [['Goal', 'Target', 'Current', 'Progress', 'Deadline']]
                 for goal in goals:

@@ -19,7 +19,7 @@ class TestGoals:
         assert response.status_code == 200
         assert b'Goals' in response.data or b'goals' in response.data
     
-    def test_create_goal(self, authenticated_client, app_context, test_user):
+    def test_create_goal(self, authenticated_client, test_db, test_user):
         """Test creating a new goal."""
         response = authenticated_client.post('/goal/add', data={
             'name': 'Emergency Fund',
@@ -36,14 +36,14 @@ class TestGoals:
         
         # Verify goal was created
     
-        goal = db.execute(
+        goal = test_db.execute(
                 "SELECT * FROM goals WHERE user_id = ? AND name = ?",
                 test_user['id'], 'Emergency Fund'
             )
         assert len(goal) == 1
         assert goal[0]['target_amount'] == 10000.00
     
-    def test_update_goal_progress(self, authenticated_client, test_goal, app_context, test_user):
+    def test_update_goal_progress(self, authenticated_client, test_goal, test_db, test_user):
         """Test updating goal progress by adding funds."""
         response = authenticated_client.post(
             f'/goal/{test_goal["id"]}/update',
@@ -59,11 +59,17 @@ class TestGoals:
         
         # Verify progress was updated
         
-        goal = db.execute("SELECT current_amount FROM goals WHERE id = ?", test_goal['id'])
+        goal = test_db.execute("SELECT current_amount FROM goals WHERE id = ?", test_goal['id'])
         assert goal[0]['current_amount'] == 1500.00  # 1000 + 500
     
-    def test_withdraw_from_goal(self, authenticated_client, test_goal, app_context):
-        """Test withdrawing funds from a goal."""
+    def test_withdraw_from_goal(self, authenticated_client, test_goal, test_db):
+        """
+        Test withdrawing funds from a goal:
+        Start: current_amount = 1000.00 (from fixture)
+        Action: withdraw 200.00
+        Expect: current_amount becomes 800.00
+        """
+        # Perform withdrawal first
         response = authenticated_client.post(
             f'/goal/{test_goal["id"]}/update',
             data={
@@ -72,12 +78,15 @@ class TestGoals:
             },
             follow_redirects=True
         )
-        
         assert response.status_code == 200
-        
-        # Verify withdrawal
-        goal = db.execute("SELECT current_amount FROM goals WHERE id = ?", test_goal['id'])
-        assert goal[0]['current_amount'] == 800.00  # 1000 - 200
+        # Accept either explicit success message or generic progress update
+        assert (b'Withdrawal successful' in response.data or
+                b'Progress updated' in response.data or
+                b'Goal completed' in response.data)
+
+        # Verify updated amount
+        goal = test_db.execute("SELECT current_amount FROM goals WHERE id = ?", test_goal['id'])
+        assert goal[0]['current_amount'] == 800.00
     
     def test_withdraw_exceeding_amount(self, authenticated_client, test_goal):
         """Test withdrawing more than current savings."""
@@ -106,7 +115,7 @@ class TestGoals:
         assert response.status_code == 200
         assert b'Goal updated successfully' in response.data
     
-    def test_delete_goal(self, authenticated_client, test_goal, app_context):
+    def test_delete_goal(self, authenticated_client, test_goal, test_db):
         """Test deleting a goal."""
         response = authenticated_client.post(
             f'/goal/{test_goal["id"]}/delete',
@@ -117,7 +126,7 @@ class TestGoals:
         assert b'Goal deleted' in response.data
         
         # Verify goal was deleted
-        goal = db.execute("SELECT * FROM goals WHERE id = ?", test_goal['id'])
+        goal = test_db.execute("SELECT * FROM goals WHERE id = ?", test_goal['id'])
         assert len(goal) == 0
     
     def test_goal_completion(self, authenticated_client, test_goal):

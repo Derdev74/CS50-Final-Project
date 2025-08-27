@@ -13,7 +13,7 @@ from decimal import Decimal
 class TestIntegration:
     """Test complete user workflows and feature integration."""
     
-    def test_complete_budget_workflow(self, authenticated_client, test_categories, test_user, app_context):
+    def test_complete_budget_workflow(self, authenticated_client, test_categories, test_user, test_db):
         """Test creating budget, adding transactions, and viewing spending."""
         expense_category = next(c for c in test_categories if c['type'] == 'expense')
         
@@ -43,8 +43,12 @@ class TestIntegration:
         assert b'150' in response.data
         assert b'500' in response.data
     
-    def test_goal_tracking_workflow(self, authenticated_client, test_user, app_context):
-        """Test creating goal, updating progress, and achieving it."""
+    def test_goal_tracking_workflow(self, authenticated_client, test_user, test_db):
+        # Get goal ID
+        goal = test_db.execute(
+            "SELECT id FROM goals WHERE user_id = ? AND name = ?",
+            test_user['id'], 'Test Savings'
+        )[0]
         # Create a goal
         authenticated_client.post('/goal/add', data={
             'name': 'Test Savings',
@@ -55,7 +59,7 @@ class TestIntegration:
         })
         
         # Get goal ID
-        goal = db.execute(
+        goal = test_db.execute(
                 "SELECT id FROM goals WHERE user_id = ? AND name = ?",
                 test_user['id'], 'Test Savings'
             )[0]
@@ -71,7 +75,7 @@ class TestIntegration:
         # Should show goal completed
         assert b'Congratulations' in response.data
     
-    def test_multi_currency_workflow(self, authenticated_client, test_categories, test_user, app_context):
+    def test_multi_currency_workflow(self, authenticated_client, test_categories, test_user, test_db):
         """Test handling multiple currencies in transactions."""
         # Update user's preferred currency
         authenticated_client.post('/profile/preferences', data={

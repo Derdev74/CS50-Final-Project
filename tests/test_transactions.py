@@ -18,7 +18,7 @@ class TestTransactions:
         assert response.status_code == 200
         assert b'Transactions' in response.data
     
-    def test_add_expense_transaction(self, authenticated_client, test_user, test_categories, app_context):
+    def test_add_expense_transaction(self, authenticated_client, test_user, test_categories, test_db):
         """Test adding an expense transaction."""
         expense_category = next(c for c in test_categories if c['type'] == 'expense')
         
@@ -34,10 +34,10 @@ class TestTransactions:
         assert b'Transaction added successfully' in response.data
         
         # Verify balance was updated
-        user = db.execute("SELECT cash FROM users WHERE id = ?", test_user['id'])
+        user = test_db.execute("SELECT cash FROM users WHERE id = ?", test_user['id'])
         assert user[0]['cash'] < test_user['cash']
     
-    def test_add_income_transaction(self, authenticated_client, test_user, test_categories, app_context):
+    def test_add_income_transaction(self, authenticated_client, test_user, test_categories, test_db):
         """Test adding an income transaction."""
         income_category = next(c for c in test_categories if c['type'] == 'income')
         
@@ -53,7 +53,7 @@ class TestTransactions:
         assert b'Transaction added successfully' in response.data
         
         # Verify balance was updated
-        user = db.execute("SELECT cash FROM users WHERE id = ?", test_user['id'])
+        user = test_db.execute("SELECT cash FROM users WHERE id = ?", test_user['id'])
         assert user[0]['cash'] > test_user['cash']
     
     def test_add_transaction_invalid_amount(self, authenticated_client, test_categories):
@@ -86,7 +86,7 @@ class TestTransactions:
         assert response.status_code == 200
         assert b'Transaction updated successfully' in response.data
     
-    def test_delete_transaction(self, authenticated_client, test_transactions, app_context):
+    def test_delete_transaction(self, authenticated_client, test_transactions, test_db):
         """Test deleting a transaction."""
         transaction = test_transactions[0]
         
@@ -99,7 +99,7 @@ class TestTransactions:
         assert b'Transaction deleted successfully' in response.data
         
         # Verify transaction was deleted
-        txn = db.execute("SELECT * FROM transactions WHERE id = ?", transaction['id'])
+        txn = test_db.execute("SELECT * FROM transactions WHERE id = ?", transaction['id'])
         assert len(txn) == 0
     
     def test_transaction_filtering(self, authenticated_client, test_transactions, test_categories):
@@ -116,11 +116,11 @@ class TestTransactions:
         response = authenticated_client.get(f'/transactions?from={date_from}&to={date_to}')
         assert response.status_code == 200
     
-    def test_transaction_pagination(self, authenticated_client, test_user, test_categories, app_context):
+    def test_transaction_pagination(self, authenticated_client, test_user, test_categories, test_db):
         """Test transaction pagination."""
         # Create 25 transactions (more than per_page limit)
         for i in range(25):
-            db.execute(
+            test_db.execute(
                     """INSERT INTO transactions (user_id, category_id, amount, description, date)
                        VALUES (?, ?, ?, ?, ?)""",
                     test_user['id'], test_categories[0]['id'], -50,

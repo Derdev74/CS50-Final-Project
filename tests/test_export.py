@@ -4,7 +4,6 @@ Test suite for data export functionality.
 Tests CSV and PDF export features with proper data isolation.
 """
 
-
 from datetime import datetime, timedelta
 from decimal import Decimal
 import pytest

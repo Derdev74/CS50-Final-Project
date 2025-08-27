@@ -17,7 +17,7 @@ class TestCategories:
         assert response.status_code == 200
         assert b'Category Management' in response.data
     
-    def test_create_user_category(self, authenticated_client, app_context, test_user):
+    def test_create_user_category(self, authenticated_client, test_db, test_user):
         """Test creating a user-defined category."""
         response = authenticated_client.post('/categories/add', data={
             'name': 'Custom Category',
@@ -31,23 +31,20 @@ class TestCategories:
         
         # Verify category was created
 
-        category = db.execute(
+        category = test_db.execute(
                 "SELECT * FROM user_categories WHERE user_id = ? AND name = ?",
                 test_user['id'], 'Custom Category'
             )
         assert len(category) == 1
         assert category[0]['color'] == '#FF5733'
     
-    def test_create_duplicate_category(self, authenticated_client, test_user, app_context):
-        """Test creating duplicate category name."""
+    def test_create_duplicate_category(self, authenticated_client, test_user, test_db):
         # Create first category
-
-        db.execute(
-                """INSERT INTO user_categories (user_id, name, type, color, icon)
-                   VALUES (?, ?, ?, ?, ?)""",
-                test_user['id'], 'Duplicate Test', 'expense', '#000000', 'folder'
-            )
-        
+        test_db.execute(
+            """INSERT INTO user_categories (user_id, name, type, color, icon)
+            VALUES (?, ?, ?, ?, ?)""",
+            test_user['id'], 'Duplicate Test', 'expense', '#000000', 'folder'
+        )
         # Try to create duplicate
         response = authenticated_client.post('/categories/add', data={
             'name': 'Duplicate Test',
@@ -58,15 +55,13 @@ class TestCategories:
         
         assert b'already exists' in response.data
     
-    def test_edit_user_category(self, authenticated_client, test_user, app_context):
-        """Test editing a user-defined category."""
+    def test_edit_user_category(self, authenticated_client, test_user, test_db):
         # Create a category first
-
-        cat_id = db.execute(
-                """INSERT INTO user_categories (user_id, name, type, color, icon)
-                   VALUES (?, ?, ?, ?, ?)""",
-                test_user['id'], 'Edit Test', 'income', '#000000', 'folder'
-            )
+        cat_id = test_db.execute(
+            """INSERT INTO user_categories (user_id, name, type, color, icon)
+            VALUES (?, ?, ?, ?, ?)""",
+            test_user['id'], 'Edit Test', 'income', '#000000', 'folder'
+        )
         
         response = authenticated_client.post(
             f'/categories/{cat_id}/edit',
@@ -82,15 +77,13 @@ class TestCategories:
         assert response.status_code == 200
         assert b'Category updated successfully' in response.data
     
-    def test_delete_user_category(self, authenticated_client, test_user, app_context):
-        """Test deleting a user-defined category."""
+    def test_delete_user_category(self, authenticated_client, test_user, test_db):
         # Create a category first
-    
-        cat_id = db.execute(
-                """INSERT INTO user_categories (user_id, name, type, color, icon)
-                   VALUES (?, ?, ?, ?, ?)""",
-                test_user['id'], 'Delete Test', 'expense', '#000000', 'folder'
-            )
+        cat_id = test_db.execute(
+            """INSERT INTO user_categories (user_id, name, type, color, icon)
+            VALUES (?, ?, ?, ?, ?)""",
+            test_user['id'], 'Delete Test', 'expense', '#000000', 'folder'
+        )
         
         response = authenticated_client.post(
             f'/categories/{cat_id}/delete',
@@ -102,7 +95,7 @@ class TestCategories:
         
         # Verify deletion
         
-        category = db.execute(
+        category = test_db.execute(
                 "SELECT * FROM user_categories WHERE id = ?", cat_id
             )
         assert len(category) == 0

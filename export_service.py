@@ -29,6 +29,15 @@ from reportlab.lib.utils import ImageReader
 
 logger = logging.getLogger(__name__)
 
+def build_csv(filename_prefix, header, rows_iter):
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(header)
+    for row in rows_iter:
+        w.writerow(row)
+    fname = f"{filename_prefix}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+    return fname, out.getvalue().encode('utf-8')
+
 class ExportService:
     """
     Service class for handling data exports in various formats.

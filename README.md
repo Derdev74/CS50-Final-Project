@@ -1,5 +1,5 @@
 # FinTrack
-#### Video Demo: https://youtu.be/REPLACE_WITH_YOUR_VIDEO_ID
+#### Video Demo: https://youtu.be/V3Sh8TzrqR0
 #### Description:
 
 FinTrack is a lightweight personal finance and budgeting web application built for my CS50 final project. It enables a registered user to record income and expenses, organize them into categories, set and track saving goals, define budgets, perform filtered data exports (CSV, plus a PDF stub), and observe basic security protections (authentication, rate limiting, session timeout, injection and rudimentary XSS defense). The project emphasizes correctness, clarity, testability, and incremental hardening rather than flashy UI. Nearly all interactive logic is covered by an automated pytest suite spanning authentication, budgets, categories, goals, transactions, exports, integration workflows, and security scenarios.

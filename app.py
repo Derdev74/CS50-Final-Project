@@ -2389,10 +2389,11 @@ def profile():
         # We need all user fields to display current settings
         # Replace the SELECT statement (line 2334-2338)
         user = db.execute("""
-            SELECT id, username, email, email_verified, cash, theme, 
-                last_login, created_at, updated_at,
-                COALESCE(preferred_currency, 'USD') as preferred_currency
-            FROM users 
+            SELECT id, username, email, email_verified, cash, theme,
+                   last_login, created_at, updated_at,
+                   google_id, password_hash,
+                   COALESCE(preferred_currency, 'USD') AS preferred_currency
+            FROM users
             WHERE id = ?
         """, user_id)
         
@@ -2415,8 +2416,17 @@ def profile():
         """, user_id)[0]['count']
         
         # Account age in days - helps users see their journey
-        created_date = datetime.fromisoformat(user['created_at'])
-        account_age_days = (datetime.now() - created_date).days
+        account_age_days = 0
+        try:
+            created_raw = user.get('created_at')
+            if created_raw:
+                try:
+                    created_date = datetime.fromisoformat(created_raw)
+                except ValueError:
+                    created_date = datetime.strptime(created_raw, '%Y-%m-%d %H:%M:%S')
+                account_age_days = (datetime.now() - created_date).days
+        except Exception as _e:
+            account_age_days = 0  # Fallback gracefully
         
         # Number of active budgets
         budget_count = db.execute("""
@@ -2454,6 +2464,10 @@ def profile():
         else:
             user['last_login_formatted'] = 'Never'
         
+        # ...inside profile() just before render_template...
+        # Pop deletion password error flag (cannot use Jinja 'do' without enabling extension)
+        delete_password_error = session.pop('delete_password_error', None)
+
         return render_template("profile.html",
                              user=user,
                              transaction_count=transaction_count,
@@ -2461,7 +2475,8 @@ def profile():
                              budget_count=budget_count,
                              total_income=totals['total_income'],
                              total_expenses=totals['total_expenses'],
-                             security_events=security_events)
+                             security_events=security_events,
+                             delete_password_error=delete_password_error)
         
     except Exception as e:
         logger.error(f"Error loading profile for user {user_id}: {str(e)}")
@@ -2755,22 +2770,38 @@ def delete_account():
         except Exception as e:
             logger.error(f"Set reset token failure: {e}")
         msg = "Password required. Reset link initialized. Set a password then retry deletion."
-        return (msg, 200) if not _wants_json() else jsonify(success=False, needs_password=True, message=msg)
+        if _wants_json():
+            return jsonify(success=False, needs_password=True, message=msg)
+        flash(msg, 'warning')
+        return redirect(url_for('profile'))
 
     if not password_input or not check_password_hash(user['password_hash'], password_input):
-        msg = "Incorrect password: Account deletion cancelled."
-        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
+        session['delete_password_error'] = True
+        flash("Incorrect password: Account deletion cancelled.", "error")
+        return redirect(url_for('profile'))
 
     try:
         db.execute("DELETE FROM users WHERE id = ?", user_id)
         log_security_event(user_id, 'ACCOUNT_DELETED', 'User initiated deletion')
+
+        if _wants_json():
+            session.clear()
+            return jsonify(success=True, message="Account deleted")
+
+        # Preserve flashed message across session.clear()
+        flash("Your account has been deleted.", "info")
+        flashes = session.get('_flashes', [])
         session.clear()
-        msg = "Account deleted"
-        return (msg, 200) if not _wants_json() else jsonify(success=True, message=msg)
+        session['_flashes'] = flashes
+        return redirect(url_for('login'))
+
     except Exception as e:
         logger.error(f"Account deletion error: {e}")
-        msg = "Failed to delete account"
-        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
+        if _wants_json():
+            return jsonify(success=False, message="Failed to delete account")
+        flash("Failed to delete account.", "error")
+        return
+    
    
 
 # Initialize Google OAuth service

@@ -6,7 +6,7 @@
     <!-- Alert placeholder for AJAX messages -->
     <div id="alert-placeholder"></div>
     <!-- Filter/Search Bar -->
-    <form id="filter-form" method="get" class="row g-2 mb-3">
+    <form id="filter-form" method="get" class="row g-2 mb-3" data-hideable="true" data-id="filters">
         <div class="col-md-2">
             <label for="filter-category" class="form-label">Category</label>
             <select id="filter-category" name="category" class="form-select">
@@ -57,32 +57,22 @@
                     <td>{{ txn.category_name }}</td>
                     <td class="fw-bold {% if txn.amount < 0 %}text-danger{% else %}text-success{% endif %}">
                         {% if txn.display_currency %}
-                        {{ txn.amount|abs|round(2) }} {{ txn.display_currency }}
-                        {% if txn.original_currency and txn.original_currency != txn.display_currency %}
-                    <br>
-                    <small class="text-muted">
-                        ({{ txn.original_amount|abs|round(2) }} {{ txn.original_currency }})
-                    </small>
-                        {% endif %}
+                            {{ txn.amount|abs|round(2) }} {{ txn.display_currency }}
+                            {% if txn.original_currency != txn.display_currency %}
+                            <br>
+                            <small class="text-muted">
+                                ({{ txn.original_amount|abs|round(2) }} {{ txn.original_currency }})
+                            </small>
+                            {% endif %}
                         {% else %}
-                        ${{ txn.amount|abs|round(2) }}
+                            ${{ txn.amount|abs|round(2) }}
                         {% endif %}
                     </td>
                     <td>
-                        <a href="{{ url_for('edit_transaction', transaction_id=txn.id) }}" class="btn btn-sm btn-primary">Edit</a>
-                        <form class="d-inline delete-transaction-form" method="post" action="{{ url_for('delete_transaction', transaction_id=txn.id) }}">
+                        <form class="delete-transaction-form d-inline" action="{{ url_for('delete_transaction', transaction_id=txn.id) }}" method="post">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
                         </form>
-                    </td>
-                    <td>
-                        ${{ txn.amount|abs|round(2) }} {{ txn.display_currency }}
-                        {% if txn.original_currency and txn.original_currency != txn.display_currency %}
-                        <br>
-                        <small class="text-muted">
-                        ({{ txn.original_amount|abs|round(2) }} {{ txn.original_currency }})
-                        </small>
-                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -90,6 +80,9 @@
                 <tr><td colspan="5" class="text-center">No transactions found.</td></tr>
                 {% endif %}
             </tbody>
+
+
+
         </table>
     </div>
     <!-- Pagination (only if needed) -->
@@ -175,7 +168,7 @@
                             <option value="">Select Category</option>
                             <optgroup label="My Categories">
                                 {% for cat in user_categories if cat.is_active %}
-                                <option value="-{{ cat.id }}" data-type="{{ cat.type }}">
+                                <option value="{{ cat.id }}" data-type="{{ cat.type }}">
                                     {{ cat.name }}
                                 </option>
                                 {% endfor %}

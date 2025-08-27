@@ -464,6 +464,10 @@ def validate_password_strength(password):
     
     return errors
 
+def _wants_json():
+    """Detect AJAX/JSON preference (simple)."""
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
 def is_account_locked(username):
     """Return True if account locked and still within lock window"""
     user = db.execute('SELECT locked_until FROM users WHERE username = ?', username)
@@ -1324,59 +1328,109 @@ def transactions():
 @app.route("/transactions/add", methods=["POST"])
 @login_required
 def add_transaction():
+    """
+    Add a transaction.
+    Returns:
+      - JSON {success:bool, message:str} for AJAX
+      - Plain text for non-AJAX (tests rely on text)
+    """
     if not validate_session():
         return redirect(url_for('login'))
     user_id = session.get('user_id')
 
-    amount_str = request.form.get('amount', '').strip()
+    amount_str = (request.form.get('amount') or '').strip()
     if not amount_str:
-        return ("Invalid amount", 200)
+        msg = "Invalid amount"
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
 
-    # Strict parse
     try:
         amount = Decimal(amount_str)
     except (InvalidOperation, ValueError):
-        return ("Invalid amount", 200)
+        msg = "Invalid amount"
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
 
     if amount <= 0 or amount > Decimal('999999999.99'):
-        return ("Invalid amount", 200)
+        msg = "Invalid amount"
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
 
     category_id = request.form.get('category_id', type=int)
     if not category_id:
-        return ("Invalid category", 200)
+        msg = "Invalid category"
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
 
-    description = request.form.get('description', '').strip()[:500]
-    date_str = request.form.get('date', '').strip() or datetime.now().strftime('%Y-%m-%d')
+    description = (request.form.get('description') or '').strip()[:500]
+    date_str = (request.form.get('date') or '').strip() or datetime.now().strftime('%Y-%m-%d')
+    currency = (request.form.get('currency') or 'USD').upper()
+    if len(currency) != 3 or not currency.isalpha():
+        currency = 'USD'
+    exchange_rate = 1.0
 
-    category = db.execute("""
+    category_rows = db.execute("""
         SELECT type FROM categories WHERE id = ?
         UNION
         SELECT type FROM user_categories WHERE id = ? AND user_id = ? AND is_active = TRUE
     """, category_id, category_id, user_id)
-    if not category:
-        return ("Invalid category", 200)
-
-    cat_type = category[0]['type']
+    if not category_rows:
+        msg = "Invalid category"
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
+    cat_type = category_rows[0]['type']
     if cat_type == 'expense' and amount > 0:
         amount = -amount
 
-    currency = request.form.get('currency', 'USD').upper()
-    exchange_rate = 1.0
-
     try:
         txn_id = db.execute("""
-            INSERT INTO transactions (user_id, category_id, amount, original_amount, currency, exchange_rate, description, date)
+            INSERT INTO transactions
+              (user_id, category_id, amount, original_amount, currency, exchange_rate, description, date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, user_id, category_id, float(amount), float(amount), currency, exchange_rate, description, date_str)
 
-        db.execute("UPDATE users SET cash = cash + ?, updated_at = ? WHERE id = ?",
-                   float(amount), datetime.now().isoformat(), user_id)
+        db.execute("""
+            UPDATE users SET cash = cash + ?, updated_at = ?
+            WHERE id = ?
+        """, float(amount), datetime.now().isoformat(), user_id)
 
-        log_security_event(user_id, 'TRANSACTION_ADDED', f'ID: {txn_id}, Amount: {amount}')
-        return ("Transaction added successfully", 200)
+        log_security_event(user_id, 'TRANSACTION_ADDED', f'ID:{txn_id} Amount:{amount}')
+        msg = "Transaction added successfully"
+        if _wants_json():
+            return jsonify(success=True, message=msg, id=txn_id)
+        return (msg, 200)
     except Exception as e:
         logger.error(f"Add transaction error: {e}")
-        return ("Failed to add transaction", 200)
+        msg = "Failed to add transaction"
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
+
+@app.route("/transactions/<int:transaction_id>/delete", methods=["POST"])
+@login_required
+def delete_transaction(transaction_id):
+    """
+    Delete a transaction; JSON for AJAX otherwise plain text.
+    """
+    if not validate_session():
+        return redirect(url_for('login'))
+    user_id = session.get('user_id')
+
+    txn = db.execute("""
+        SELECT id, amount FROM transactions
+        WHERE id = ? AND user_id = ?
+    """, transaction_id, user_id)
+    if not txn:
+        msg = "Transaction not found"
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
+
+    amount = Decimal(str(txn[0]['amount']))
+    try:
+        db.execute("DELETE FROM transactions WHERE id = ? AND user_id = ?", transaction_id, user_id)
+        db.execute("""
+            UPDATE users SET cash = cash - ?, updated_at = ?
+            WHERE id = ?
+        """, float(amount), datetime.now().isoformat(), user_id)
+        log_security_event(user_id, 'TRANSACTION_DELETED', f'ID:{transaction_id}')
+        msg = "Transaction deleted successfully"
+        return (msg, 200) if not _wants_json() else jsonify(success=True, message=msg)
+    except Exception as e:
+        logger.error(f"Delete transaction error: {e}")
+        msg = "Failed to delete transaction"
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
 
 
 @app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
@@ -1444,33 +1498,6 @@ def edit_transaction(transaction_id):
 
     # GET (not used in tests)
     return ("Edit Transaction Form", 200)
-
-@app.route("/transactions/<int:transaction_id>/delete", methods=["POST"])
-@login_required
-def delete_transaction(transaction_id):
-    if not validate_session():
-        return redirect(url_for('login'))
-    user_id = session.get('user_id')
-    txn = db.execute("""
-        SELECT id, amount FROM transactions
-        WHERE id = ? AND user_id = ?
-    """, transaction_id, user_id)
-    if not txn:
-        return ("Transaction not found", 200)
-    amount = Decimal(str(txn[0]['amount']))
-    try:
-        db.execute("DELETE FROM transactions WHERE id = ? AND user_id = ?", transaction_id, user_id)
-        db.execute("UPDATE users SET cash = cash - ?, updated_at = ? WHERE id = ?",
-                   float(amount), datetime.now().isoformat(), user_id)
-        log_security_event(user_id, 'TRANSACTION_DELETED', f'ID: {transaction_id}')
-        return ("Transaction deleted successfully", 200)
-    except Exception as e:
-        logger.error(f"Delete transaction error: {e}")
-        return ("Failed to delete transaction", 200)
-
-
-
-# ...existing code...
 
 @app.route("/goals/<int:goal_id>/withdraw", methods=["POST"])
 @login_required
@@ -2699,57 +2726,52 @@ def update_preferences():
 @login_required
 def delete_account():
     """
-    Delete user account permanently.
-    
-    This is a destructive action that:
-    1. Requires password confirmation
-    2. Deletes all user data (transactions, budgets, goals)
-    3. Cannot be undone
-    
-    The CASCADE foreign keys handle related data deletion automatically.
+    Account deletion with Google-linked password setup gate.
+    JSON for AJAX if requested; plain text otherwise.
     """
     if not validate_session():
         return redirect(url_for('login'))
-    
     user_id = session.get('user_id')
-    
-    # Require password confirmation for account deletion
-    password = request.form.get('password', '')
-    
-    if not password:
-        flash('Password is required to delete account.', 'error')
-        return redirect(url_for('profile'))
-    
-    try:
-        # NEW
-        user = db.execute("SELECT password_hash, username FROM users WHERE id = ?", user_id)[0]
+    password_input = (request.form.get('password') or '').strip()
 
-        # Check if user has a password (not OAuth-only account)
-        if not user['password_hash']:
-            flash('OAuth accounts cannot be deleted this way. Please contact support.', 'error')
-            return redirect(url_for('profile'))
-
-        if not check_password_hash(user['password_hash'], password):
-            log_security_event(user_id, 'ACCOUNT_DELETION_FAILED', 'Incorrect password')
-            flash('Incorrect password. Account deletion cancelled.', 'error')
-            return redirect(url_for('profile'))
-        
-        # Log the deletion before it happens
-        log_security_event(user_id, 'ACCOUNT_DELETED', f'User {user["username"]} deleted their account')
-        
-        # Delete the user account (CASCADE will handle related records)
-        db.execute("DELETE FROM users WHERE id = ?", user_id)
-        
-        # Clear session
+    user_rows = db.execute("""
+        SELECT id, password_hash, google_id, email
+        FROM users WHERE id = ?
+    """, user_id)
+    if not user_rows:
         session.clear()
-        
-        flash('Your account has been permanently deleted. We\'re sorry to see you go.', 'info')
         return redirect(url_for('login'))
-        
+    user = user_rows[0]
+
+    # Google-linked and no password provided
+    if user.get('google_id') and not password_input:
+        token = secrets.token_urlsafe(24)
+        try:
+            db.execute("""
+                UPDATE users SET password_reset_token = ?, password_reset_expires = ?
+                WHERE id = ?
+            """, token, (datetime.now() + timedelta(minutes=30)).isoformat(), user_id)
+            log_security_event(user_id, 'ACCOUNT_DELETE_BLOCKED', 'Needs local password first')
+        except Exception as e:
+            logger.error(f"Set reset token failure: {e}")
+        msg = "Password required. Reset link initialized. Set a password then retry deletion."
+        return (msg, 200) if not _wants_json() else jsonify(success=False, needs_password=True, message=msg)
+
+    if not password_input or not check_password_hash(user['password_hash'], password_input):
+        msg = "Incorrect password: Account deletion cancelled."
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
+
+    try:
+        db.execute("DELETE FROM users WHERE id = ?", user_id)
+        log_security_event(user_id, 'ACCOUNT_DELETED', 'User initiated deletion')
+        session.clear()
+        msg = "Account deleted"
+        return (msg, 200) if not _wants_json() else jsonify(success=True, message=msg)
     except Exception as e:
-        logger.error(f"Error deleting account for user {user_id}: {str(e)}")
-        flash('Failed to delete account. Please contact support.', 'error')
-        return redirect(url_for('profile'))
+        logger.error(f"Account deletion error: {e}")
+        msg = "Failed to delete account"
+        return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
+   
 
 # Initialize Google OAuth service
 google_oauth = GoogleOAuthService()

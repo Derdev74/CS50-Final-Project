@@ -7,16 +7,14 @@
     <!-- Page Header with Summary Statistics -->
     <!-- This gives users an immediate overview of their budget health -->
     <div class="row mb-4">
-        <div class="col-md-8">
-            <h2>Budget Management</h2>
-            <!-- Add this in the header section, after the h2 title -->
-            <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>Budget Management</h2>
+        <div class="col-md-8 d-flex justify-content-between align-items-start" data-hideable="true" data-id="budget-header">
+            <div>
+                <h2 class="mb-1">Budget Management</h2>
+                <p class="text-muted mb-0">Set spending limits and track your financial goals</p>
+            </div>
             <button type="button" class="btn btn-outline-primary" onclick="window.location.href='/export/budgets/csv'">
                 <i class="fas fa-download"></i> Export Budgets
             </button>
-            </div>
-            <p class="text-muted">Set spending limits and track your financial goals</p>
         </div>
         <div class="col-md-4 text-end">
             <!-- Summary badges showing overall budget status -->
@@ -35,7 +33,7 @@
 
     <!-- Active Budgets Section -->
     <!-- This is where users see all their budgets and current status -->
-    <div class="card mb-4">
+    <div class="card mb-4" data-hideable="true" data-id="active-budgets">
         <div class="card-header bg-primary text-white">
             <h5 class="mb-0">Active Budgets</h5>
         </div>
@@ -187,7 +185,7 @@
 
     <!-- Add New Budget Section -->
     <!-- This form allows users to create new budget limits -->
-    <div class="card">
+    <div class="card" data-hideable="true" data-id="add-budget">
         <div class="card-header bg-success text-white">
             <h5 class="mb-0">Create New Budget</h5>
         </div>
@@ -280,7 +278,7 @@
 
     <!-- Budget Tips Section -->
     <!-- Educational content to help users budget effectively -->
-    <div class="alert alert-info mt-4">
+    <div class="alert alert-info mt-4" data-hideable="true" data-id="budget-tips">
         <h6><i class="fas fa-lightbulb"></i> Budgeting Tips</h6>
         <ul class="mb-0">
             <li>Start with essential categories like rent, utilities, and groceries</li>

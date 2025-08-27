@@ -43,6 +43,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+function getCSRF() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute('content') : '';
+}
 // ===============================
 // FORM VALIDATION HELPERS
 // ===============================
@@ -136,8 +140,9 @@ function focusFirstInvalid(formId) {
 // AJAX for Add/Delete Transaction (Transactions Page)
 // ===============================
 
+// ...existing code (REPLACE the entire AJAX + hideable sections from "document.addEventListener('DOMContentLoaded'" down to the end with below)...
 document.addEventListener('DOMContentLoaded', function() {
-    // Add Transaction via AJAX
+    // Theme init already above (keep)
     const addForm = document.getElementById('add-transaction-form');
     if (addForm) {
         addForm.addEventListener('submit', function(e) {
@@ -146,21 +151,22 @@ document.addEventListener('DOMContentLoaded', function() {
             fetch(addForm.action, {
                 method: 'POST',
                 body: formData,
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            })
-            .then(res => res.json())
-            .then(data => {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-Token': getCSRF()
+                }
+            }).then(async res => {
+                let data;
+                try { data = await res.json(); } catch { data = { success:false, message:'Server error' }; }
                 if (data.success) {
                     location.reload();
                 } else {
                     showAlert(data.message || 'Failed to add transaction.', 'danger');
                 }
-            })
-            .catch(() => showAlert('Failed to add transaction.', 'danger'));
+            }).catch(() => showAlert('Failed to add transaction.', 'danger'));
         });
     }
 
-    // Delete Transaction via AJAX
     document.querySelectorAll('.delete-transaction-form').forEach(form => {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -169,22 +175,90 @@ document.addEventListener('DOMContentLoaded', function() {
             fetch(form.action, {
                 method: 'POST',
                 body: formData,
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            })
-            .then(res => res.json())
-            .then(data => {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-Token': getCSRF()
+                }
+            }).then(async res => {
+                let data;
+                try { data = await res.json(); } catch { data = { success:false, message:'Server error' }; }
                 if (data.success) {
                     form.closest('tr').remove();
-                    showAlert('Transaction deleted successfully!', 'success');
+                    showAlert('Transaction deleted successfully', 'success');
                 } else {
                     showAlert(data.message || 'Failed to delete transaction.', 'danger');
                 }
-            })
-            .catch(() => showAlert('Failed to delete transaction.', 'danger'));
+            }).catch(() => showAlert('Failed to delete transaction.', 'danger'));
         });
     });
+
+    initHideables();
+    renderRestoreBar();
 });
 
-// ===============================
-// END OF main.js
-// ===============================
+// ---- Hideable widgets ----
+const HIDE_KEY = 'fintrack.hiddenWidgets';
+function getHiddenSet() {
+    return new Set(JSON.parse(localStorage.getItem(HIDE_KEY) || '[]'));
+}
+function saveHidden(set) {
+    localStorage.setItem(HIDE_KEY, JSON.stringify(Array.from(set)));
+}
+function initHideables() {
+    const hidden = getHiddenSet();
+    document.querySelectorAll('[data-hideable="true"][data-id]').forEach(el => {
+        const id = el.getAttribute('data-id');
+        if (hidden.has(id)) {
+            el.style.display = 'none';
+            return;
+        }
+        if (el.querySelector('.hide-widget-btn')) return;
+        el.style.position = 'relative';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-secondary hide-widget-btn';
+        btn.style.cssText = 'position:absolute;top:.5rem;right:.5rem;';
+        btn.textContent = 'Hide';
+        btn.onclick = () => {
+            const h = getHiddenSet();
+            h.add(id);
+            saveHidden(h);
+            el.style.display = 'none';
+            renderRestoreBar();
+        };
+        el.appendChild(btn);
+    });
+}
+function renderRestoreBar() {
+    const hidden = getHiddenSet();
+    let bar = document.getElementById('restore-hidden-bar');
+    if (!hidden.size) {
+        if (bar) bar.remove();
+        return;
+    }
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'restore-hidden-bar';
+        bar.className = 'mb-3 d-flex flex-wrap gap-2';
+        const container = document.querySelector('.container, .container-fluid');
+        if (container) container.prepend(bar);
+    }
+    bar.innerHTML = '';
+    hidden.forEach(id => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-sm btn-outline-secondary';
+        b.textContent = 'Show ' + id;
+        b.onclick = () => {
+            const h = getHiddenSet();
+            h.delete(id);
+            saveHidden(h);
+            const el = document.querySelector('[data-id="'+id+'"]');
+            if (el) el.style.display = '';
+            renderRestoreBar();
+            initHideables();
+        };
+        bar.appendChild(b);
+    });
+}
+// ...end of file...

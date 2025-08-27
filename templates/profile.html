@@ -32,7 +32,7 @@
         <!-- Left Column: Account Information and Settings -->
         <div class="col-md-8">
             <!-- Basic Information Card -->
-            <div class="card mb-4">
+            <div class="card mb-4" data-hideable="true" data-id="profile-basic">
                 <div class="card-header bg-primary text-white">
                     <h5 class="mb-0">
                         <i class="fas fa-user"></i> Account Information
@@ -112,7 +112,7 @@
             </div>
 
             <!-- Password Change Card -->
-            <div class="card mb-4">
+            <div class="card mb-4" data-hideable="true" data-id="profile-password">
                 <div class="card-header bg-warning text-dark">
                     <h5 class="mb-0">
                         <i class="fas fa-key"></i> Change Password
@@ -214,7 +214,7 @@
             </div>
 
             <!-- Preferences Card -->
-            <div class="card mb-4">
+            <div class="card mb-4" data-hideable="true" data-id="profile-preferences">
                 <div class="card-header bg-info text-white">
                     <h5 class="mb-0">
                         <i class="fas fa-cog"></i> Preferences
@@ -292,7 +292,7 @@
             </div>
 
             <!-- Danger Zone Card -->
-            <div class="card border-danger">
+            <div class="card border-danger" data-hideable="true" data-id="profile-danger">
                 <div class="card-header bg-danger text-white">
                     <h5 class="mb-0">
                         <i class="fas fa-exclamation-triangle"></i> Danger Zone
@@ -462,6 +462,13 @@
                         <label for="delete_password" class="form-label">
                             Enter your password to confirm:
                         </label>
+                        {% if user.google_id and not user.password_hash %}
+                        <div class="alert alert-info py-2 mb-2">
+                        <small><i class="fas fa-info-circle"></i>
+                            Your account is linked with Google only. A password reset link will be initialized when you attempt deletion; set a password, then retry.
+                        </small>
+                        </div>
+                        {% endif %}
                         <input type="password" 
                                class="form-control" 
                                id="delete_password" 

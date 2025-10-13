@@ -1,12 +1,10 @@
 from flask import redirect, render_template, session, flash, request, current_app, g
 from functools import wraps
-from datetime import datetime
 import requests
 import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 import os
-from functools import wraps
 import logging
 
 # Configure logging for currency operations

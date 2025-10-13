@@ -11,7 +11,6 @@ Security considerations:
 - File generation is done in memory to avoid disk storage
 - Sanitization of data to prevent injection attacks
 """
-from datetime import datetime
 import csv
 import io
 import logging

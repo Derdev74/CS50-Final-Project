@@ -1,4 +1,4 @@
-import os, re, time, secrets, smtplib, re, logging, csv, io, json, hashlib, urllib.parse
+import os, re, time, secrets, smtplib, logging, csv, io, json, hashlib, urllib.parse
 from flask_wtf import FlaskForm
 from dotenv import load_dotenv
 from wtforms import StringField, PasswordField, BooleanField, SubmitField
@@ -77,12 +77,6 @@ def get_database_path():
 # Initialize database connection using CS50's SQL
 DATABASE_PATH = get_database_path()
 db = SQL(f"sqlite:///{DATABASE_PATH}")
-
-# Initialize service classes
-user_service = UserService(db)
-auth_service = AuthService(user_service)
-export_service = ExportService(db)
-google_oauth = GoogleOAuthService()
 
 def init_db():
     """
@@ -279,15 +273,11 @@ login_attempts = {}
 EXPORT_RATE_LIMIT = 10  # Maximum exports per hour
 export_attempts = {}
 
-# [Continue with the rest of your Flask forms, helper functions, and routes...]
-# Initialize export service after database initialization
+# Initialize service classes after database initialization
+user_service = UserService(db)
+auth_service = AuthService(user_service)
 export_service = ExportService(db)
-# Rate limiting configuration
-RATE_LIMIT_ATTEMPTS = 5
-RATE_LIMIT_WINDOW = 300  # 5 minutes
-ACCOUNT_LOCKOUT_ATTEMPTS = 10  # Lock account after 10 failed attempts
-ACCOUNT_LOCKOUT_DURATION = 1800  # 30 minutes
-login_attempts = {}
+google_oauth = GoogleOAuthService()
 
 # Enhanced Forms
 class RegistrationForm(FlaskForm):

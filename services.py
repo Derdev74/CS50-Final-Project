@@ -52,7 +52,6 @@ class UserService:
 
     def lock_account(self, username, locked_until):
         """Lock user account until specified time"""
-        locked_until = datetime.now() + timedelta(seconds=self.LOCKOUT_TIME)
         self.db.execute(
             "UPDATE users SET locked_until = ? WHERE username = ?",
             locked_until.isoformat(), username

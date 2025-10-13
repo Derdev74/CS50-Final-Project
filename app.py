@@ -19,9 +19,6 @@ from oauth_service import GoogleOAuthService
 from oauthlib.oauth2 import WebApplicationClient
 from export_service import ExportService
 
-
-
-
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 # Load environment variables
 load_dotenv()
@@ -478,7 +475,6 @@ def record_failed_login(username):
         locked_until = (datetime.now() + timedelta(seconds=ACCOUNT_LOCKOUT_DURATION)).isoformat()
         db.execute('UPDATE users SET locked_until = ? WHERE username = ?', locked_until, username)
 
-
 def reset_failed_logins(user_id):
     db.execute('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?', user_id)
 
@@ -537,7 +533,6 @@ def validate_session():
             return False
     return True
     
-
 def is_safe_url(target):
 
     """Check if a redirect URL is safe to prevent open redirect attacks"""
@@ -547,9 +542,11 @@ def is_safe_url(target):
     test_url = urlparse(urljoin(request.host_url, target))
     
     return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
 @app.context_processor
 def inject_csrf_token():
     return dict(csrf_token=generate_csrf)
+
 # Routes
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -762,8 +759,6 @@ def reset_password(token):
         flash('Password reset failed. Please try again.', 'error')
         return redirect(url_for('forgot_password'))
 
-# ...existing code...
-
 def _login_response(form):
     """Render login template; never return None (fallback plain text if template missing)."""
     try:
@@ -805,7 +800,6 @@ def login():
 
     # GET or non-valid POST
     return _login_response(form)
-
 
 @app.route('/logout', methods=['GET', 'POST'])
 @login_required
@@ -1421,7 +1415,6 @@ def delete_transaction(transaction_id):
         logger.error(f"Delete transaction error: {e}")
         msg = "Failed to delete transaction"
         return (msg, 200) if not _wants_json() else jsonify(success=False, message=msg)
-
 
 @app.route("/transactions/<int:transaction_id>/edit", methods=["GET", "POST"])
 @login_required
@@ -2146,17 +2139,11 @@ def add_goal():
     
     return redirect(url_for('goals'))
 
-# ...existing code...
-
 @app.route("/goal/<int:goal_id>/withdraw", methods=["POST"])
 @login_required
 def withdraw_from_goal_singular(goal_id):
     # Reuse plural handler for test compatibility
     return withdraw_from_goal(goal_id)
-
-
-
-# ...find the existing update_goal_progress() definition and replace JUST that function plus add the new plural route directly below...
 
 @app.route("/goal/<int:goal_id>/update", methods=["POST"])
 @login_required
@@ -2792,11 +2779,6 @@ def delete_account():
         flash("Failed to delete account.", "error")
         return
     
-   
-
-# Initialize Google OAuth service
-google_oauth = GoogleOAuthService()
-
 @app.route('/auth/google')
 def google_login():
     """
@@ -3086,9 +3068,6 @@ def check_export_rate_limit(user_id):
     # Record attempt
     export_attempts[user_id].append(current_time)
 
-# Export Routes
-
-
 @app.route('/export/transactions/csv')
 @login_required
 def export_transactions_csv():
@@ -3172,7 +3151,6 @@ def export_goals_csv():
         'Content-Type': 'text/csv',
         'Content-Disposition': f'attachment; filename="{filename}"'
     })
-
 
 @app.route('/export/report/pdf')
 @login_required
@@ -3293,7 +3271,6 @@ def manage_categories():
         flash('Failed to load categories.', 'error')
         return redirect(url_for('dashboard'))
 
-
 @app.route("/categories/add", methods=["POST"])
 @login_required
 def add_user_category():
@@ -3346,7 +3323,6 @@ def add_user_category():
         flash('Failed to create category.', 'error')
     
     return redirect(url_for('manage_categories'))
-
 
 @app.route("/categories/<int:category_id>/edit", methods=["POST"])
 @login_required

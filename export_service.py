@@ -34,7 +34,7 @@ def build_csv(filename_prefix, header, rows_iter):
     w.writerow(header)
     for row in rows_iter:
         w.writerow(row)
-    fname = f"{filename_prefix}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+    fname = f"{filename_prefix}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
     return fname, out.getvalue().encode('utf-8')
 
 class ExportService:

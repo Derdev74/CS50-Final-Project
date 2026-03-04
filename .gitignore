@@ -4,5 +4,6 @@ __pycache__/
 .env
 .claude/
 flask_session/
+.pytest_cache/
+.venv/
 instance/
-

@@ -348,11 +348,10 @@ def with_currency_conversion(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        from flask import g
+        from flask import g, current_app
         # Initialize currency service if not already done
         if not hasattr(g, 'currency_service'):
-            from cs50 import SQL
-            db = SQL(f"sqlite:///instance/fintrack.db")  # Adjust path as needed
+            db = current_app.config.get('db') or getattr(g, 'db', None)
             g.currency_service = CurrencyService(db)
         return f(*args, **kwargs)
     return decorated_function

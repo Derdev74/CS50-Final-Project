@@ -430,27 +430,6 @@ def generate_token():
     """Generate a secure random token"""
     return secrets.token_urlsafe(32)
 
-def validate_password_strength(password):
-    """Validate password strength"""
-    errors = []
-    
-    if len(password) < 8:
-        errors.append("Password must be at least 8 characters long")
-    if len(password) > 128:
-        errors.append("Password must be less than 128 characters long")
-    if not re.search(r'[A-Z]', password):
-        errors.append("Password must contain at least one uppercase letter")
-    if not re.search(r'[a-z]', password):
-        errors.append("Password must contain at least one lowercase letter")
-    if not re.search(r'[0-9]', password):
-        errors.append("Password must contain at least one number")
-    if not re.search(r'[^A-Za-z0-9]', password):
-        errors.append("Password must contain at least one special character")
-    if re.search(r'\s', password):
-        errors.append("Password cannot contain spaces")
-    
-    return errors
-
 def _wants_json():
     """Detect AJAX/JSON preference (simple)."""
     return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
@@ -533,16 +512,6 @@ def validate_session():
             return False
     return True
     
-def is_safe_url(target):
-
-    """Check if a redirect URL is safe to prevent open redirect attacks"""
-    from urllib.parse import urlparse, urljoin
-    
-    ref_url = urlparse(request.host_url)
-    test_url = urlparse(urljoin(request.host_url, target))
-    
-    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
-
 @app.context_processor
 def inject_csrf_token():
     return dict(csrf_token=generate_csrf)
@@ -1100,6 +1069,7 @@ def dashboard():
         return render_template("dashboard.html",
             user={"username": "User", "cash": 0},
             balance=0,
+            user_currency='USD',
             recent_transactions=[],
             transaction_count=0,
             category_labels=[],
@@ -1538,48 +1508,6 @@ def withdraw_from_goal(goal_id):
         logger.error(f"Goal withdraw error: {e}")
         return ("Failed to withdraw", 200)
 
-def convert_transactions_to_user_currency(transactions, user_id):
-    """
-    Convert all transaction amounts to user's preferred currency.
-    
-    Args:
-        transactions: List of transaction records
-        user_id: User ID for getting preferred currency
-        
-    Returns:
-        List of transactions with converted amounts
-    """
-    currency_service = CurrencyService(db)
-    user_currency = currency_service.get_user_preferred_currency(user_id)
-    
-    for txn in transactions:
-        if txn.get('currency') and txn['currency'] != user_currency:
-            # Convert amount to user's preferred currency
-            original_amount = Decimal(str(txn['amount']))
-            converted_amount = currency_service.convert_amount(
-                abs(original_amount),
-                txn['currency'],
-                user_currency
-            )
-            
-            # Preserve sign (income vs expense)
-            if original_amount < 0:
-                converted_amount = -converted_amount
-            
-            # Store both amounts for transparency
-            txn['original_amount'] = float(original_amount)
-            txn['original_currency'] = txn['currency']
-            txn['amount'] = float(converted_amount)
-            txn['display_currency'] = user_currency
-            txn['exchange_rate'] = currency_service.fetch_exchange_rate(
-                txn['currency'], user_currency
-            )
-        else:
-            txn['display_currency'] = txn.get('currency', 'USD')
-            txn['exchange_rate'] = 1.0
-    
-    return transactions
-
 @app.route("/budget", methods=["GET"])
 @login_required
 def budget():
@@ -1718,48 +1646,35 @@ def add_budget():
     if not validate_session():
         return redirect(url_for('login'))
     user_id = session.get('user_id')
-    category_id = request.form.get('category_id', type=int)
-    amount_str = request.form.get('amount', '').strip()
-    period = request.form.get('period', '').strip()
-    start_date_str = request.form.get('start_date', '').strip() or datetime.now().strftime('%Y-%m-%d')
-    
-    # Validate and sanitize input with comprehensive checks
-    # This prevents both accidental errors and malicious input
+
+    # Validate and sanitize input
     category_id = request.form.get('category_id', type=int)
     if not category_id or category_id == 0:
         flash('Please select a valid category.', 'error')
         return redirect(url_for('budget'))
-    
-    # Use Decimal for precise financial calculations
-    # This prevents floating-point errors in financial calculations
+
     amount_str = request.form.get('amount', '').strip()
     if not amount_str:
         flash('Budget amount is required.', 'error')
         return redirect(url_for('budget'))
-    
+
     try:
         amount = Decimal(amount_str)
-        
-        # Validate reasonable budget amounts
-        # Prevents both typos and potential overflow attacks
         if amount <= 0:
             flash('Budget amount must be positive.', 'error')
             return redirect(url_for('budget'))
-        
         if amount > Decimal('999999.99'):
             flash('Budget amount is too large.', 'error')
             return redirect(url_for('budget'))
-            
     except (InvalidOperation, ValueError):
         flash('Invalid budget amount format.', 'error')
         return redirect(url_for('budget'))
-    
-    # Validate period selection
+
     period = request.form.get('period', '').strip()
     if period not in ['weekly', 'monthly', 'yearly']:
         flash('Invalid budget period selected.', 'error')
         return redirect(url_for('budget'))
-    
+
     # Validate start date
     start_date_str = request.form.get('start_date', '').strip()
     if not start_date_str:
@@ -1792,10 +1707,8 @@ def add_budget():
         WHERE user_id = ? AND category_id = ? AND period = ? AND start_date = ?
         """, user_id, category_id, period, start_date_str)
         if existing:
-        # Return plain 200 response so test can assert substring.
             return ("Budget already exists", 200)
-        # ...existing code...
-        
+
         # Insert new budget
         budget_id = db.execute("""
             INSERT INTO budgets (user_id, category_id, amount, period, start_date)
@@ -2777,8 +2690,8 @@ def delete_account():
         if _wants_json():
             return jsonify(success=False, message="Failed to delete account")
         flash("Failed to delete account.", "error")
-        return
-    
+        return redirect(url_for('profile'))
+
 @app.route('/auth/google')
 def google_login():
     """
@@ -3169,74 +3082,6 @@ def export_report_pdf():
         'Content-Type':'application/pdf',
         'Content-Disposition':'attachment; filename="report.pdf"'
     })
-# ...existing code...
-    """
-    Generate and download comprehensive PDF report.
-    
-    Security:
-    - Requires authentication
-    - Only includes data for logged-in user
-    - Logs export action for audit
-    """
-    if not validate_session():
-        return redirect(url_for('login'))
-    
-    user_id = session.get('user_id')
-    
-    # In each export route, add:
-    try:
-        check_export_rate_limit(user_id)
-    except Exception as e:
-        flash(str(e), 'warning')
-        return redirect(request.referrer or url_for('dashboard'))
-
-    try:
-        # Get user information
-        user = db.execute("SELECT * FROM users WHERE id = ?", user_id)[0]
-        
-        # Get additional statistics
-        transaction_count = db.execute(
-            "SELECT COUNT(*) as count FROM transactions WHERE user_id = ?", 
-            user_id
-        )[0]['count']
-        
-        budget_count = db.execute(
-            "SELECT COUNT(*) as count FROM budgets WHERE user_id = ?", 
-            user_id
-        )[0]['count']
-        
-        goal_count = db.execute(
-            "SELECT COUNT(*) as count FROM goals WHERE user_id = ?", 
-            user_id
-        )[0]['count']
-        
-        user_info = {
-            'username': user['username'],
-            'email': user['email'],
-            'balance': user['cash'],
-            'created_at': user['created_at'],
-            'transaction_count': transaction_count,
-            'budget_count': budget_count,
-            'goal_count': goal_count
-        }
-        
-        # Generate PDF
-        pdf_data = export_service.export_complete_report_pdf(user_id, user_info)
-        
-        # Log export action
-        log_security_event(user_id, 'DATA_EXPORTED', 'Complete report exported to PDF')
-        
-        # Create response
-        response = make_response(pdf_data.getvalue())
-        response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename=fintrack_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
-        
-        return response
-        
-    except Exception as e:
-        logger.error(f"Error generating PDF report for user {user_id}: {str(e)}")
-        flash('Failed to generate report. Please try again.', 'error')
-        return redirect(url_for('dashboard'))
 
 @app.route("/categories", methods=["GET"])
 @login_required

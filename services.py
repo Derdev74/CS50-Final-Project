@@ -128,8 +128,7 @@ class AuthService:
             
             # Check if we should lock the account
             if user['failed_login_attempts'] + 1 >= self.LOCKOUT_THRESHOLD:
-                locked_until = datetime.now().replace(microsecond=0)
-                locked_until = locked_until.replace(second=locked_until.second + self.LOCKOUT_TIME)
+                locked_until = datetime.now() + timedelta(seconds=self.LOCKOUT_TIME)
                 self.user_service.lock_account(username, locked_until)
                 return False, "Too many failed login attempts. Account has been temporarily locked."
             

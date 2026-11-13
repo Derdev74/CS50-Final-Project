@@ -1,9 +1,18 @@
+# Python environments
+.venv/
 venv/
+
+# Runtime data and logs
+flask_session/
+instance/
+*.log
+*.db
+*.sqlite
+
+# Local configuration and test artifacts
+.env
 __pycache__/
 *.pyc
-.env
-.claude/
-flask_session/
 .pytest_cache/
-.venv/
-instance/
+.coverage
+.claude/

@@ -7,3 +7,10 @@ flask_session/
 .pytest_cache/
 .venv/
 instance/
+# Local data and logs (never commit)
+*.log
+*.db
+*.sqlite
+*.sqlite3
+.coverage
+htmlcov/

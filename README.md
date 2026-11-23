@@ -17,7 +17,7 @@ FinTrack is a comprehensive personal finance web application built as my CS50 fi
 
 ### 🔐 Security & Authentication
 - **Multiple Login Options**: Traditional authentication + **Google OAuth 2.0** integration for passwordless sign-in
-- **Password Security**: Strong password requirements (8+ chars, uppercase, lowercase, digits, special characters) with bcrypt hashing
+- **Password Security**: Strong password requirements (8+ chars, uppercase, lowercase, digits, special characters) with salted PBKDF2 hashing (Werkzeug)
 - **Email Verification**: Token-based email verification system with attempt tracking
 - **Password Reset**: Secure email-based password reset with 15-minute token expiration
 - **Session Protection**: 24-hour session lifetime, IP address validation, and automatic timeout
@@ -114,7 +114,7 @@ Secure passwordless authentication with token exchange, ID verification, and CSR
 ## Technology Stack
 
 **Core:** Flask 2.3.3, Python 3.12, SQLite, CS50 SQL Library
-**Security:** Werkzeug (bcrypt), Flask-WTF (CSRF), Authlib (OAuth), Google Auth, Flask-Limiter
+**Security:** Werkzeug (salted PBKDF2 password hashing), Flask-WTF (CSRF), Authlib (OAuth), Google Auth, Flask-Limiter
 **Data & Export:** Pandas, ReportLab (PDF), CurrencyLayer API
 **Email:** Flask-Mail, SMTP
 **Testing:** pytest, pytest-flask, pytest-cov, faker
